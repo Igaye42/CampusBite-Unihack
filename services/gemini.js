@@ -6,12 +6,16 @@ const ai = new GoogleGenAI({
 
 export async function analyzeFoodImage(base64Image) {
   const prompt = `
-    Analyze this food image. Return strictly a JSON object with no markdown formatting.
+    Analyze this food image and identify the SINGLE most prominent food item. 
+    Return strictly a JSON object with no markdown formatting.
+    
     Schema requirements:
     {
-      "category": "Must be exactly one of: [pizza, sandwich, pastries, rice_noodle_box, salad, drinks, other]",
-      "estimated_qty": "Integer. Estimate the number of servings or items",
-      "safety_risk": "Boolean. True ONLY IF the food contains raw meat, raw seafood, or is clearly unrefrigerated dairy. Otherwise false.",
+      "food_title": "String. A specific, highly recognizable name for the main food (e.g., 'Pepperoni Pizza', 'Blueberry Muffin').",
+      "category": "String. Must be exactly one of: [meal, snack, dessert, drink, other].",
+      "estimated_qty": "Integer. Estimate the total quantity or servings of this main food.",
+      "estimated_weight_kg": "Float. Estimate the total weight of this food in kilograms (e.g., 0.5).",
+      "safety_risk": "Boolean. True ONLY IF this food contains raw meat, raw seafood, or is clearly unrefrigerated dairy.",
       "suggested_tags": "Array of strings. Select applicable from: [vegetarian, vegan, halal, gluten-free, dairy-free, nut-warning]"
     }
     `;
