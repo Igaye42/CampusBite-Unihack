@@ -9,7 +9,10 @@ import {
   Text,
   View
 } from "react-native";
-import { claimListing, subscribeToClaimedListings } from "../services/firebase";
+import {
+  claimListing,
+  subscribeToClaimedListings
+} from "../../services/firebase";
 
 export default function ClaimScreen() {
   // 更新了接收的参数名称，与 index.tsx 传递的参数保持严格一致

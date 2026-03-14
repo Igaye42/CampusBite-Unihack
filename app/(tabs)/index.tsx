@@ -12,7 +12,7 @@ import {
 import {
   getAvailableListings,
   subscribeToAvailableListings
-} from "../services/firebase";
+} from "../../services/firebase";
 
 function getFoodEmoji(foodTitle: string, category: string) {
   const combined = `${foodTitle} ${category}`.toLowerCase();
