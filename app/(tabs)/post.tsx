@@ -157,7 +157,16 @@ export default function PostScreen() {
         estimated_qty: quantity
       };
 
-      const listingId = await uploadFoodListing(finalData, location.trim());
+      const listingId = await uploadFoodListing(finalData, location.trim(), {
+  food_title: foodTitle,
+  category: category,
+  estimated_qty: quantity,
+  tags: tags
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean),
+  pickup_deadline: deadline
+});
 
       Alert.alert(
         "Success",

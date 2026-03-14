@@ -33,20 +33,26 @@ export const db = getFirestore(app);
  * Merges AI-extracted data with user manual input and saves it to the database.
  * @param {Object} aiData - The JSON output from the Gemini API.
  * @param {String} locationData - The manual location input from the user.
+ * @param {Object} manualData - Optional manual overrides from the frontend.
  * @returns {Promise<String>} The generated document ID.
  */
-export async function uploadFoodListing(aiData, locationData) {
+export async function uploadFoodListing(aiData, locationData, manualData = {}) {
   try {
+    const manualTags = Array.isArray(manualData.tags) ? manualData.tags : [];
+    const finalTags =
+      manualTags.length > 0 ? manualTags : aiData.suggested_tags || [];
+
     const listing = {
-      food_title: aiData.food_title, // Specific name for UI
-      category: aiData.category, // Broad category for filtering
-      estimated_qty: aiData.estimated_qty,
-      estimated_weight_kg: aiData.estimated_weight_kg || 0.35, // Dynamic weight from AI
+      food_title: manualData.food_title || aiData.food_title,
+      category: manualData.category || aiData.category,
+      estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
+      estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
       safety_risk: aiData.safety_risk,
-      tags: aiData.suggested_tags || [],
+      tags: finalTags,
       location: locationData,
-      // Automatically set pickup deadline to 2 hours from now
-      pickup_deadline: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      pickup_deadline:
+        manualData.pickup_deadline ||
+        new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       status: "available",
       createdAt: serverTimestamp()
     };
