@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { getAvailableListings, subscribeToAvailableListings } from '../services/firebase';
+import { getAvailableListings, subscribeToAvailableListings } from '../../services/firebase';
 
 const DIETARY_TAGS = ['vegetarian', 'vegan', 'halal', 'gluten-free', 'dairy-free', 'nut-warning'];
 
