@@ -1,46 +1,25 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View
-} from "react-native";
-import {
-  getAvailableListings,
-  subscribeToAvailableListings
-} from "../../services/firebase";
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { getAvailableListings, subscribeToAvailableListings } from '../services/firebase';
+
+const DIETARY_TAGS = ['vegetarian', 'vegan', 'halal', 'gluten-free', 'dairy-free', 'nut-warning'];
 
 function getFoodEmoji(foodTitle: string, category: string) {
   const combined = `${foodTitle} ${category}`.toLowerCase();
-
-  if (combined.includes("pizza")) return "🍕";
-  if (
-    combined.includes("pastries") ||
-    combined.includes("cake") ||
-    combined.includes("muffin")
-  )
-    return "🥐";
-  if (combined.includes("sandwich") || combined.includes("burger")) return "🥪";
-  if (combined.includes("salad")) return "🥗";
-  if (combined.includes("drink") || combined.includes("coffee")) return "🥤";
-  if (
-    combined.includes("rice") ||
-    combined.includes("noodle") ||
-    combined.includes("sushi")
-  )
-    return "🍱";
-
-  return "🍽️";
+  if (combined.includes('pizza')) return '🍕';
+  if (combined.includes('pastries') || combined.includes('cake') || combined.includes('muffin')) return '🥐';
+  if (combined.includes('sandwich') || combined.includes('burger')) return '🥪';
+  if (combined.includes('salad')) return '🥗';
+  if (combined.includes('drink') || combined.includes('coffee')) return '🥤';
+  if (combined.includes('rice') || combined.includes('noodle') || combined.includes('sushi')) return '🍱';
+  return '🍽️';
 }
 
 function getUrgencyColor(minutesLeft: number) {
-  if (minutesLeft <= 15) return "#D32F2F";
-  if (minutesLeft <= 30) return "#F57C00";
-  return "#2E7D32";
+  if (minutesLeft <= 15) return '#D32F2F';
+  if (minutesLeft <= 30) return '#F57C00';
+  return '#2E7D32';
 }
 
 export default function HomeScreen() {
@@ -48,36 +27,35 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // UI State for filtering
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
   useEffect(() => {
-    // Subscribe to real-time updates from Firebase
     const unsubscribe = subscribeToAvailableListings((data: any[]) => {
       const formattedListings = data.map((item: any) => {
-        // Calculate minutes remaining
         let minutesLeft = 0;
-        let pickupByTime = "N/A";
+        let pickupByTime = 'N/A';
 
         if (item.pickup_deadline) {
           const deadline = new Date(item.pickup_deadline);
           const now = new Date();
           const diffMs = deadline.getTime() - now.getTime();
           minutesLeft = Math.max(0, Math.floor(diffMs / (1000 * 60)));
-          pickupByTime = deadline.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit"
-          });
+          pickupByTime = deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
         return {
           id: item.id,
-          food_title: item.food_title || "Food Item", // Use the specific AI generated title
-          category: item.category || "other", // Keep the broad category for emojis/tags
-          quantity: item.estimated_qty || "Some",
+          food_title: item.food_title || 'Food Item',
+          category: item.category || 'other',
+          quantity: item.estimated_qty || 'Some',
           weight: item.estimated_weight_kg || 0.35,
           safety_risk: item.safety_risk || false,
-          location: item.location || "Unknown Location",
+          location: item.location || 'Unknown Location',
           minutesLeft: minutesLeft,
           tags: item.tags || [],
-          pickupBy: pickupByTime
+          pickupBy: pickupByTime,
         };
       });
 
@@ -85,7 +63,6 @@ export default function HomeScreen() {
       setLoading(false);
     });
 
-    // Cleanup subscription when the component unmounts
     return () => unsubscribe();
   }, []);
 
@@ -94,17 +71,38 @@ export default function HomeScreen() {
     try {
       await getAvailableListings();
     } catch (error) {
-      console.error("Error on refresh: ", error);
+      console.error('Error on refresh: ', error);
     } finally {
       setRefreshing(false);
     }
   };
 
+  // Frontend fallback filtering: Remove expired items, apply search text, apply tag filter
+  const processedListings = listings.filter((item) => {
+    // 1. Expiry filter (Frontend fallback)
+    if (item.minutesLeft <= 0) return false;
+
+    // 2. Search query filter (matches title or location)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchTitle = item.food_title.toLowerCase().includes(query);
+      const matchLocation = item.location.toLowerCase().includes(query);
+      if (!matchTitle && !matchLocation) return false;
+    }
+
+    // 3. Dietary tag filter
+    if (selectedTag) {
+      // Handles case where tags array might be undefined or empty
+      if (!item.tags || !item.tags.includes(selectedTag)) return false;
+    }
+
+    return true;
+  });
+
   if (loading && !refreshing) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#2E7D32" />
-        <Text style={styles.loadingText}>Fetching fresh food...</Text>
       </View>
     );
   }
@@ -112,28 +110,40 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Nearby Food Feed</Text>
-      <Text style={styles.subheading}>
-        Available food around campus right now
-      </Text>
+
+      {/* Search Bar UI */}
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search food or location..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+
+      {/* Dietary Filter Pills UI */}
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {DIETARY_TAGS.map((tag) => (
+            <Pressable
+              key={tag}
+              style={[styles.filterPill, selectedTag === tag && styles.filterPillSelected]}
+              onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
+            >
+              <Text style={[styles.filterPillText, selectedTag === tag && styles.filterPillTextSelected]}>
+                {tag}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
       <FlatList
-        data={listings}
+        data={processedListings}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#2E7D32"]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2E7D32']} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>🍱</Text>
-            <Text style={styles.emptyText}>No food available right now.</Text>
-            <Text style={styles.emptySubtext}>
-              Check back later or post something!
-            </Text>
+            <Text style={styles.emptyText}>No food matches your criteria.</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -145,10 +155,7 @@ export default function HomeScreen() {
               <Text
                 style={[
                   styles.timeBadge,
-                  {
-                    color: getUrgencyColor(item.minutesLeft),
-                    borderColor: getUrgencyColor(item.minutesLeft)
-                  }
+                  { color: getUrgencyColor(item.minutesLeft), borderColor: getUrgencyColor(item.minutesLeft) },
                 ]}
               >
                 {item.minutesLeft} min left
@@ -157,19 +164,15 @@ export default function HomeScreen() {
 
             <Text style={styles.categoryTag}>Category: {item.category}</Text>
             <Text style={styles.detail}>📍 {item.location}</Text>
-            <Text style={styles.detail}>
-              📦 {item.quantity} items (~{item.weight}kg)
-            </Text>
+            <Text style={styles.detail}>📦 {item.quantity} items (~{item.weight}kg)</Text>
             <Text style={styles.detail}>⏰ Pickup by {item.pickupBy}</Text>
 
             {item.safety_risk && (
-              <Text style={styles.warningText}>
-                ⚠️ High Risk (Needs Refrigerator)
-              </Text>
+              <Text style={styles.warningText}>⚠️ High Risk (Needs Refrigerator)</Text>
             )}
 
             <View style={styles.tagsRow}>
-              {item.tags.length > 0 ? (
+              {item.tags && item.tags.length > 0 ? (
                 item.tags.map((tag: string, index: number) => (
                   <View key={index} style={styles.tagPill}>
                     <Text style={styles.tagText}>{tag}</Text>
@@ -186,14 +189,14 @@ export default function HomeScreen() {
               style={styles.button}
               onPress={() =>
                 router.push({
-                  pathname: "/claim",
-                  // Pass the EXACT parameter names expected by claim.tsx
+                  pathname: '/claim',
                   params: {
                     id: item.id,
                     food_title: item.food_title,
                     qty: String(item.quantity),
-                    location: item.location
-                  }
+                    location: item.location,
+                    safety_risk: String(item.safety_risk) // Pass safety risk state
+                  },
                 })
               }
             >
@@ -207,104 +210,30 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F6F9F4",
-    paddingHorizontal: 16,
-    paddingTop: 16
-  },
-  heading: { fontSize: 26, fontWeight: "800", color: "#1B4332" },
-  subheading: {
-    fontSize: 14,
-    color: "#5C6F65",
-    marginTop: 4,
-    marginBottom: 16
-  },
+  container: { flex: 1, backgroundColor: '#F6F9F4', paddingHorizontal: 16, paddingTop: 16 },
+  heading: { fontSize: 26, fontWeight: '800', color: '#1B4332', marginBottom: 12 },
+  searchInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE5DB', borderRadius: 12, padding: 12, fontSize: 15, marginBottom: 12 },
+  filterContainer: { marginBottom: 16 },
+  filterPill: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE5DB', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
+  filterPillSelected: { backgroundColor: '#E8F5E9', borderColor: '#2E7D32' },
+  filterPillText: { color: '#555', fontSize: 13, fontWeight: '600' },
+  filterPillTextSelected: { color: '#2E7D32', fontWeight: '700' },
   listContent: { paddingBottom: 24 },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 3
-  },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 6,
-    gap: 8
-  },
-  title: { fontSize: 20, fontWeight: "800", color: "#222", flex: 1 },
-  timeBadge: {
-    fontSize: 12,
-    fontWeight: "700",
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    overflow: "hidden"
-  },
-  categoryTag: {
-    fontSize: 13,
-    color: "#2E7D32",
-    fontWeight: "600",
-    marginBottom: 8
-  },
-  detail: { fontSize: 15, color: "#4F4F4F", marginBottom: 5 },
-  warningText: {
-    color: "#D32F2F",
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 4,
-    marginBottom: 4
-  },
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 8,
-    marginBottom: 14,
-    gap: 8
-  },
-  tagPill: {
-    backgroundColor: "#E8F5E9",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999
-  },
-  tagText: { color: "#2E7D32", fontSize: 12, fontWeight: "700" },
-  tagPillNeutral: {
-    backgroundColor: "#ECEFF1",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999
-  },
-  tagTextNeutral: { color: "#607D8B", fontSize: 12, fontWeight: "700" },
-  button: {
-    backgroundColor: "#2E7D32",
-    paddingVertical: 13,
-    borderRadius: 12,
-    alignItems: "center"
-  },
-  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
-  center: { justifyContent: "center", alignItems: "center", flex: 1 },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#2E7D32",
-    fontWeight: "600"
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60
-  },
-  emptyEmoji: { fontSize: 64, marginBottom: 16 },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#1B4332",
-    marginBottom: 8
-  },
-  emptySubtext: { fontSize: 15, color: "#5C6F65", textAlign: "center" }
+  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 14, elevation: 3 },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 8 },
+  title: { fontSize: 20, fontWeight: '800', color: '#222', flex: 1 },
+  timeBadge: { fontSize: 12, fontWeight: '700', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, overflow: 'hidden' },
+  categoryTag: { fontSize: 13, color: '#2E7D32', fontWeight: '600', marginBottom: 8 },
+  detail: { fontSize: 15, color: '#4F4F4F', marginBottom: 5 },
+  warningText: { color: '#D32F2F', fontSize: 13, fontWeight: '700', marginTop: 4, marginBottom: 4 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 14, gap: 8 },
+  tagPill: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  tagText: { color: '#2E7D32', fontSize: 12, fontWeight: '700' },
+  tagPillNeutral: { backgroundColor: '#ECEFF1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  tagTextNeutral: { color: '#607D8B', fontSize: 12, fontWeight: '700' },
+  button: { backgroundColor: '#2E7D32', paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: '#5C6F65' },
 });
