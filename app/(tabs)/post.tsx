@@ -15,6 +15,8 @@ import {
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
 
+const CATEGORIES = ["meal", "snack", "dessert", "other"];
+
 export default function PostScreen() {
   const [imageUri, setImageUri] = useState("");
   const [imageBase64, setImageBase64] = useState("");
@@ -25,7 +27,7 @@ export default function PostScreen() {
   const [location, setLocation] = useState("");
   const [quantity, setQuantity] = useState("");
   const [tags, setTags] = useState("");
-  const [deadline, setDeadline] = useState(""); // Restored state
+  const [deadline, setDeadline] = useState("");
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -67,6 +69,7 @@ export default function PostScreen() {
       const aiData = await analyzeFoodImage(asset.base64);
       setAiAnalysisResult(aiData);
 
+      // Auto-fill from AI analysis
       setFoodTitle(aiData.food_title || "Unknown Food");
       setCategory(aiData.category || "other");
 
@@ -98,16 +101,22 @@ export default function PostScreen() {
     try {
       setIsPosting(true);
 
-      const listingId = await uploadFoodListing(
-        aiAnalysisResult,
-        location.trim()
-      );
+      // If the user manually edited the fields, override the AI's original data
+      const finalData = {
+        ...aiAnalysisResult,
+        food_title: foodTitle,
+        category: category,
+        estimated_qty: quantity
+      };
+
+      const listingId = await uploadFoodListing(finalData, location.trim());
 
       Alert.alert(
         "Success",
         `Food listing posted successfully.\nListing ID: ${listingId}`
       );
 
+      // Clear the form
       setImageUri("");
       setImageBase64("");
       setAiAnalysisResult(null);
@@ -116,7 +125,7 @@ export default function PostScreen() {
       setLocation("");
       setQuantity("");
       setTags("");
-      setDeadline(""); // Restored reset
+      setDeadline("");
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -153,25 +162,35 @@ export default function PostScreen() {
         </View>
       ) : null}
 
-      <View style={styles.row}>
-        <View style={{ flex: 1, marginRight: 8 }}>
-          <Text style={styles.label}>Specific Food</Text>
-          <TextInput
-            style={[styles.input, styles.disabledInput]}
-            value={foodTitle}
-            editable={false}
-            placeholder="e.g. Cheese Pizza"
-          />
-        </View>
-        <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={styles.label}>Category</Text>
-          <TextInput
-            style={[styles.input, styles.disabledInput]}
-            value={category}
-            editable={false}
-            placeholder="e.g. meal"
-          />
-        </View>
+      <Text style={styles.label}>Specific Food</Text>
+      <TextInput
+        style={styles.input}
+        value={foodTitle}
+        onChangeText={setFoodTitle}
+        placeholder="e.g. Cheese Pizza"
+      />
+
+      <Text style={styles.label}>Category</Text>
+      <View style={styles.categoryRow}>
+        {CATEGORIES.map((cat) => (
+          <Pressable
+            key={cat}
+            style={[
+              styles.categoryPill,
+              category === cat && styles.categoryPillActive
+            ]}
+            onPress={() => setCategory(cat)}
+          >
+            <Text
+              style={[
+                styles.categoryText,
+                category === cat && styles.categoryTextActive
+              ]}
+            >
+              {cat}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       <Text style={styles.label}>Pickup Location</Text>
@@ -185,7 +204,7 @@ export default function PostScreen() {
       <Text style={styles.label}>Quantity</Text>
       <TextInput
         style={styles.input}
-        placeholder="Auto-filled from AI for now"
+        placeholder="Auto-filled from AI, but editable"
         value={quantity}
         onChangeText={setQuantity}
       />
@@ -193,19 +212,17 @@ export default function PostScreen() {
       <Text style={styles.label}>Dietary Tags</Text>
       <TextInput
         style={styles.input}
-        placeholder="Auto-filled from AI for now"
+        placeholder="Auto-filled from AI, but editable"
         value={tags}
         onChangeText={setTags}
       />
 
-      {/* Restored Pickup Deadline Field */}
       <Text style={styles.label}>Pickup Deadline</Text>
       <TextInput
-        style={[styles.input, styles.disabledInput]}
-        placeholder="Auto-set in database to +2 hours"
+        style={styles.input}
+        placeholder="e.g. 5:00 PM today"
         value={deadline}
         onChangeText={setDeadline}
-        editable={false}
       />
 
       <Pressable
@@ -243,25 +260,43 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: "700",
-    marginBottom: 6,
-    marginTop: 12,
-    color: "#223"
+    marginBottom: 8,
+    marginTop: 14,
+    color: "#222"
   },
   input: {
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#DDE5DB",
     borderRadius: 12,
-    padding: 12,
+    padding: 14,
     fontSize: 15
   },
-  disabledInput: {
-    backgroundColor: "#F5F5F5",
-    color: "#757575"
-  },
-  row: {
+  categoryRow: {
     flexDirection: "row",
-    justifyContent: "space-between"
+    flexWrap: "wrap",
+    gap: 10
+  },
+  categoryPill: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#DDE5DB",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20
+  },
+  categoryPillActive: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#2E7D32"
+  },
+  categoryText: {
+    color: "#555",
+    fontSize: 14,
+    fontWeight: "600"
+  },
+  categoryTextActive: {
+    color: "#2E7D32",
+    fontWeight: "700"
   },
   photoButton: {
     backgroundColor: "#E8F5E9",
