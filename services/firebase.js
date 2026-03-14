@@ -1,18 +1,18 @@
 import { initializeApp } from "firebase/app";
 import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  increment,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    getFirestore,
+    increment,
+    onSnapshot,
+    query,
+    serverTimestamp,
+    setDoc,
+    updateDoc,
+    where
 } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -38,8 +38,10 @@ export const db = getFirestore(app);
 export async function uploadFoodListing(aiData, locationData) {
   try {
     const listing = {
-      category: aiData.category,
+      food_title: aiData.food_title, // Specific name for UI
+      category: aiData.category, // Broad category for filtering
       estimated_qty: aiData.estimated_qty,
+      estimated_weight_kg: aiData.estimated_weight_kg || 0.35, // Dynamic weight from AI
       safety_risk: aiData.safety_risk,
       tags: aiData.suggested_tags || [],
       location: locationData,
@@ -94,16 +96,20 @@ export function subscribeToAvailableListings(callback) {
     where("status", "==", "available")
   );
 
-  const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    const listings = [];
-    querySnapshot.forEach((doc) => {
-      listings.push({ id: doc.id, ...doc.data() });
-    });
-    console.log(`Real-time update: ${listings.length} available listings.`);
-    callback(listings);
-  }, (error) => {
-    console.error("Error listening to listings: ", error);
-  });
+  const unsubscribe = onSnapshot(
+    q,
+    (querySnapshot) => {
+      const listings = [];
+      querySnapshot.forEach((doc) => {
+        listings.push({ id: doc.id, ...doc.data() });
+      });
+      console.log(`Real-time update: ${listings.length} available listings.`);
+      callback(listings);
+    },
+    (error) => {
+      console.error("Error listening to listings: ", error);
+    }
+  );
 
   return unsubscribe;
 }
@@ -114,29 +120,30 @@ export function subscribeToAvailableListings(callback) {
  * @returns {Function} An unsubscribe function to detach the listener.
  */
 export function subscribeToClaimedListings(callback) {
-  const q = query(
-    collection(db, "listings"),
-    where("status", "==", "claimed")
+  const q = query(collection(db, "listings"), where("status", "==", "claimed"));
+
+  const unsubscribe = onSnapshot(
+    q,
+    (querySnapshot) => {
+      const listings = [];
+      querySnapshot.forEach((doc) => {
+        listings.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Sort manually to avoid requiring a composite index immediately
+      listings.sort((a, b) => {
+        const aTime = a.claimedAt?.toMillis() || 0;
+        const bTime = b.claimedAt?.toMillis() || 0;
+        return bTime - aTime;
+      });
+
+      console.log(`Real-time update: ${listings.length} claimed listings.`);
+      callback(listings.slice(0, 15)); // Retain only the 15 most recent
+    },
+    (error) => {
+      console.error("Error listening to claimed listings: ", error);
+    }
   );
-
-  const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    const listings = [];
-    querySnapshot.forEach((doc) => {
-      listings.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort manually to avoid requiring a composite index immediately
-    listings.sort((a, b) => {
-      const aTime = a.claimedAt?.toMillis() || 0;
-      const bTime = b.claimedAt?.toMillis() || 0;
-      return bTime - aTime;
-    });
-
-    console.log(`Real-time update: ${listings.length} claimed listings.`);
-    callback(listings.slice(0, 15)); // Retain only the 15 most recent
-  }, (error) => {
-    console.error("Error listening to claimed listings: ", error);
-  });
 
   return unsubscribe;
 }
@@ -147,67 +154,80 @@ export function subscribeToClaimedListings(callback) {
  * @returns {Function} An unsubscribe function to detach the listener.
  */
 export function subscribeToTopLocation(callback) {
-  const q = query(
-    collection(db, "listings"),
-    where("status", "==", "claimed")
-  );
+  const q = query(collection(db, "listings"), where("status", "==", "claimed"));
 
-  const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    const locationCounts = {};
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      const loc = data.location;
-      if (loc) {
-        locationCounts[loc] = (locationCounts[loc] || 0) + 1;
+  const unsubscribe = onSnapshot(
+    q,
+    (querySnapshot) => {
+      const locationCounts = {};
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const loc = data.location;
+        if (loc) {
+          locationCounts[loc] = (locationCounts[loc] || 0) + 1;
+        }
+      });
+
+      let topLoc = "No claims yet";
+      let maxCount = 0;
+
+      for (const [loc, count] of Object.entries(locationCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          topLoc = loc;
+        }
       }
-    });
 
-    let topLoc = "No claims yet";
-    let maxCount = 0;
-
-    for (const [loc, count] of Object.entries(locationCounts)) {
-      if (count > maxCount) {
-        maxCount = count;
-        topLoc = loc;
-      }
+      console.log(`Top location updated: ${topLoc} (${maxCount} claims)`);
+      callback(topLoc);
+    },
+    (error) => {
+      console.error("Error calculating top location: ", error);
     }
-
-    console.log(`Top location updated: ${topLoc} (${maxCount} claims)`);
-    callback(topLoc);
-  }, (error) => {
-    console.error("Error calculating top location: ", error);
-  });
+  );
 
   return unsubscribe;
 }
 
 /**
- * Executes an atomic transaction to claim a listing and updates campus impact metrics.
+ * Executes an atomic transaction to claim a listing and updates dynamic campus impact metrics.
  * @param {String} listingId - The document ID of the listing to claim.
  * @returns {Promise<String>} The generated 4-character claim code.
  */
 export async function claimListing(listingId) {
   try {
-    // Generate a random 4-character alphanumeric claim code
     const claimCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-
-    // 1. Update the specific listing document
     const listingRef = doc(db, "listings", listingId);
+
+    // 1. Retrieve the specific item's AI-estimated weight
+    const listingSnap = await getDoc(listingRef);
+    if (!listingSnap.exists() || listingSnap.data().status !== "available") {
+      throw new Error("Listing is no longer available.");
+    }
+
+    const itemWeight = listingSnap.data().estimated_weight_kg || 0.35;
+    const itemCo2 = itemWeight * 2.5; // Calculate dynamic CO2 prevention
+
+    // 2. Lock the specific listing
     await updateDoc(listingRef, {
       status: "claimed",
       claim_code: claimCode,
       claimedAt: serverTimestamp()
     });
 
-    // 2. Increment the global campus impact metrics
+    // 3. Increment the global campus impact metrics dynamically
     const metricsRef = doc(db, "metrics", "campus_totals");
     await updateDoc(metricsRef, {
-      mealsSaved: increment(1)
+      mealsSaved: increment(1),
+      wasteReducedKg: increment(itemWeight),
+      co2PreventedKg: increment(itemCo2)
     }).catch(async (error) => {
       // Create the metrics document if it doesn't exist yet (first claim)
       if (error.code === "not-found") {
         await setDoc(metricsRef, {
-          mealsSaved: 1
+          mealsSaved: 1,
+          wasteReducedKg: itemWeight,
+          co2PreventedKg: itemCo2
         });
       }
     });
@@ -232,14 +252,14 @@ export async function getImpactStats() {
     if (docSnap.exists()) {
       return docSnap.data();
     } else {
-      // Return zeros if no items have been claimed yet
-      return { mealsSaved: 0 };
+      return { mealsSaved: 0, wasteReducedKg: 0, co2PreventedKg: 0 };
     }
   } catch (e) {
     console.error("Error fetching impact stats: ", e);
     throw e;
   }
 }
+
 /**
  * Sets up a real-time listener for campus impact metrics.
  * @param {Function} callback - A callback function that receives the updated metrics.
@@ -248,15 +268,19 @@ export async function getImpactStats() {
 export function subscribeToImpactStats(callback) {
   const metricsRef = doc(db, "metrics", "campus_totals");
 
-  const unsubscribe = onSnapshot(metricsRef, (docSnap) => {
-    if (docSnap.exists()) {
-      callback(docSnap.data());
-    } else {
-      callback({ mealsSaved: 0 });
+  const unsubscribe = onSnapshot(
+    metricsRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data());
+      } else {
+        callback({ mealsSaved: 0, wasteReducedKg: 0, co2PreventedKg: 0 });
+      }
+    },
+    (error) => {
+      console.error("Error listening to impact stats: ", error);
     }
-  }, (error) => {
-    console.error("Error listening to impact stats: ", error);
-  });
+  );
 
   return unsubscribe;
 }
