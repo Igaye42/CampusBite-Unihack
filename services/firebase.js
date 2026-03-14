@@ -1,18 +1,18 @@
 import { initializeApp } from "firebase/app";
 import {
-    addDoc,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    getFirestore,
-    increment,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
-    where,
-    onSnapshot
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  increment,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where
 } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -124,18 +124,58 @@ export function subscribeToClaimedListings(callback) {
     querySnapshot.forEach((doc) => {
       listings.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort manually to avoid requiring a composite index immediately
     listings.sort((a, b) => {
       const aTime = a.claimedAt?.toMillis() || 0;
       const bTime = b.claimedAt?.toMillis() || 0;
-      return bTime - aTime; 
+      return bTime - aTime;
     });
 
     console.log(`Real-time update: ${listings.length} claimed listings.`);
     callback(listings.slice(0, 15)); // Retain only the 15 most recent
   }, (error) => {
     console.error("Error listening to claimed listings: ", error);
+  });
+
+  return unsubscribe;
+}
+
+/**
+ * Sets up a real-time listener to determine the top campus location based on claims.
+ * @param {Function} callback - A callback function that receives the top location string.
+ * @returns {Function} An unsubscribe function to detach the listener.
+ */
+export function subscribeToTopLocation(callback) {
+  const q = query(
+    collection(db, "listings"),
+    where("status", "==", "claimed")
+  );
+
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const locationCounts = {};
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const loc = data.location;
+      if (loc) {
+        locationCounts[loc] = (locationCounts[loc] || 0) + 1;
+      }
+    });
+
+    let topLoc = "No claims yet";
+    let maxCount = 0;
+
+    for (const [loc, count] of Object.entries(locationCounts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        topLoc = loc;
+      }
+    }
+
+    console.log(`Top location updated: ${topLoc} (${maxCount} claims)`);
+    callback(topLoc);
+  }, (error) => {
+    console.error("Error calculating top location: ", error);
   });
 
   return unsubscribe;
@@ -162,16 +202,12 @@ export async function claimListing(listingId) {
     // 2. Increment the global campus impact metrics
     const metricsRef = doc(db, "metrics", "campus_totals");
     await updateDoc(metricsRef, {
-      mealsSaved: increment(1),
-      wasteReducedKg: increment(0.35),
-      co2PreventedKg: increment(0.875)
+      mealsSaved: increment(1)
     }).catch(async (error) => {
       // Create the metrics document if it doesn't exist yet (first claim)
       if (error.code === "not-found") {
         await setDoc(metricsRef, {
-          mealsSaved: 1,
-          wasteReducedKg: 0.35,
-          co2PreventedKg: 0.875
+          mealsSaved: 1
         });
       }
     });
@@ -197,10 +233,30 @@ export async function getImpactStats() {
       return docSnap.data();
     } else {
       // Return zeros if no items have been claimed yet
-      return { mealsSaved: 0, wasteReducedKg: 0, co2PreventedKg: 0 };
+      return { mealsSaved: 0 };
     }
   } catch (e) {
     console.error("Error fetching impact stats: ", e);
     throw e;
   }
+}
+/**
+ * Sets up a real-time listener for campus impact metrics.
+ * @param {Function} callback - A callback function that receives the updated metrics.
+ * @returns {Function} An unsubscribe function to detach the listener.
+ */
+export function subscribeToImpactStats(callback) {
+  const metricsRef = doc(db, "metrics", "campus_totals");
+
+  const unsubscribe = onSnapshot(metricsRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback(docSnap.data());
+    } else {
+      callback({ mealsSaved: 0 });
+    }
+  }, (error) => {
+    console.error("Error listening to impact stats: ", error);
+  });
+
+  return unsubscribe;
 }

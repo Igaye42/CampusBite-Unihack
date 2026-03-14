@@ -1,18 +1,18 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  ScrollView,
+  ActivityIndicator,
   Alert,
   Image,
-  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { analyzeFoodImage } from '../../services/gemini';
 import { uploadFoodListing } from '../../services/firebase';
+import { analyzeFoodImage } from '../../services/gemini';
 
 export default function PostScreen() {
   const [imageUri, setImageUri] = useState('');
