@@ -19,13 +19,14 @@ export default function PostScreen() {
   const [imageUri, setImageUri] = useState("");
   const [imageBase64, setImageBase64] = useState("");
 
-  // Split the food type into specific title and broad category
   const [foodTitle, setFoodTitle] = useState("");
   const [category, setCategory] = useState("");
 
   const [location, setLocation] = useState("");
   const [quantity, setQuantity] = useState("");
   const [tags, setTags] = useState("");
+  const [deadline, setDeadline] = useState(""); // Restored state
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
@@ -66,7 +67,6 @@ export default function PostScreen() {
       const aiData = await analyzeFoodImage(asset.base64);
       setAiAnalysisResult(aiData);
 
-      // Update both the specific title and the broad category
       setFoodTitle(aiData.food_title || "Unknown Food");
       setCategory(aiData.category || "other");
 
@@ -108,7 +108,6 @@ export default function PostScreen() {
         `Food listing posted successfully.\nListing ID: ${listingId}`
       );
 
-      // Clear the form after successful post
       setImageUri("");
       setImageBase64("");
       setAiAnalysisResult(null);
@@ -117,6 +116,7 @@ export default function PostScreen() {
       setLocation("");
       setQuantity("");
       setTags("");
+      setDeadline(""); // Restored reset
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -153,7 +153,6 @@ export default function PostScreen() {
         </View>
       ) : null}
 
-      {/* Side-by-side layout for Food Title and Category */}
       <View style={styles.row}>
         <View style={{ flex: 1, marginRight: 8 }}>
           <Text style={styles.label}>Specific Food</Text>
@@ -197,6 +196,16 @@ export default function PostScreen() {
         placeholder="Auto-filled from AI for now"
         value={tags}
         onChangeText={setTags}
+      />
+
+      {/* Restored Pickup Deadline Field */}
+      <Text style={styles.label}>Pickup Deadline</Text>
+      <TextInput
+        style={[styles.input, styles.disabledInput]}
+        placeholder="Auto-set in database to +2 hours"
+        value={deadline}
+        onChangeText={setDeadline}
+        editable={false}
       />
 
       <Pressable
