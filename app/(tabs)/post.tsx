@@ -1,4 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +32,7 @@ export default function PostScreen() {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
 
   const handlePickImage = async () => {
@@ -68,7 +70,7 @@ export default function PostScreen() {
 
       const aiData = await analyzeFoodImage(asset.base64);
 
-      // NEW: Intercept and block if multiple distinct food types are detected
+      // Intercept and block if multiple distinct food types are detected
       if (aiData.contains_multiple_food_types) {
         Alert.alert(
           "Multiple Foods Detected 🛑",
@@ -77,7 +79,7 @@ export default function PostScreen() {
         // Clear the invalid image so the user is forced to pick a new one
         setImageUri("");
         setImageBase64("");
-        return; // Exit the function early
+        return;
       }
 
       setAiAnalysisResult(aiData);
@@ -94,6 +96,39 @@ export default function PostScreen() {
       Alert.alert("AI Error", "Failed to analyze the food image.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleGetCurrentLocation = async () => {
+    setIsFetchingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Allow location access to auto-fill your address."
+        );
+        return;
+      }
+
+      const locationData = await Location.getCurrentPositionAsync({});
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude: locationData.coords.latitude,
+        longitude: locationData.coords.longitude
+      });
+
+      if (geocode.length > 0) {
+        const address = geocode[0];
+        // Combine building name and street name
+        const formattedAddress =
+          `${address.name || ""} ${address.street || ""}`.trim();
+        setLocation(formattedAddress || "Unknown Location");
+      }
+    } catch (error) {
+      console.error("Location error:", error);
+      Alert.alert("Error", "Could not fetch current location.");
+    } finally {
+      setIsFetchingLocation(false);
     }
   };
 
@@ -114,7 +149,7 @@ export default function PostScreen() {
     try {
       setIsPosting(true);
 
-      // If the user manually edited the fields, override the AI's original data
+      // Override the AI's original data with any manual user edits
       const finalData = {
         ...aiAnalysisResult,
         food_title: foodTitle,
@@ -206,7 +241,17 @@ export default function PostScreen() {
         ))}
       </View>
 
-      <Text style={styles.label}>Pickup Location</Text>
+      <View style={styles.locationHeaderRow}>
+        <Text style={styles.label}>Pickup Location</Text>
+        <Pressable
+          onPress={handleGetCurrentLocation}
+          disabled={isFetchingLocation}
+        >
+          <Text style={styles.currentLocationText}>
+            {isFetchingLocation ? "Locating..." : "📍 Use Current"}
+          </Text>
+        </Pressable>
+      </View>
       <TextInput
         style={styles.input}
         placeholder="e.g. Engineering Building"
@@ -276,6 +321,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 14,
     color: "#222"
+  },
+  locationHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline"
+  },
+  currentLocationText: {
+    color: "#2E7D32",
+    fontWeight: "700",
+    fontSize: 14
   },
   input: {
     backgroundColor: "#fff",

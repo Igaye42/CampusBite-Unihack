@@ -4,6 +4,8 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -15,7 +17,6 @@ import {
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
-  // 更新了接收的参数名称，与 index.tsx 传递的参数保持严格一致
   const { id, food_title, qty, location } = useLocalSearchParams<{
     id?: string;
     food_title?: string;
@@ -60,6 +61,29 @@ export default function ClaimScreen() {
     }
   };
 
+  const openMapsForNavigation = (destination: string) => {
+    if (!destination || destination === "Unknown Location") {
+      Alert.alert(
+        "Invalid Location",
+        "No valid address provided for navigation."
+      );
+      return;
+    }
+
+    const encodedQuery = encodeURIComponent(destination);
+
+    const url = Platform.select({
+      ios: `maps:0,0?q=${encodedQuery}`,
+      android: `geo:0,0?q=${encodedQuery}`
+    });
+
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        Alert.alert("Error", "Could not open map application.");
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>{id ? "Claim Item" : "Claim History"}</Text>
@@ -71,6 +95,15 @@ export default function ClaimScreen() {
             📦 {qty ? `${qty} items` : "Unknown quantity"}
           </Text>
           <Text style={styles.detail}>📍 {location || "Unknown Location"}</Text>
+
+          <Pressable
+            style={{ marginBottom: 16, marginTop: 4 }}
+            onPress={() => openMapsForNavigation(location || "")}
+          >
+            <Text style={{ color: "#0277BD", fontWeight: "700", fontSize: 15 }}>
+              🧭 Get Directions
+            </Text>
+          </Pressable>
 
           {!claimed ? (
             <Pressable
@@ -103,7 +136,6 @@ export default function ClaimScreen() {
         renderItem={({ item }) => (
           <View style={styles.historyCard}>
             <View style={styles.historyTopRow}>
-              {/* 优先显示具体食物名称，若无则降级显示宏观分类 */}
               <Text style={styles.historyTitle}>
                 {item.food_title || item.category || "Food"}
               </Text>
