@@ -67,6 +67,19 @@ export default function PostScreen() {
       setIsAnalyzing(true);
 
       const aiData = await analyzeFoodImage(asset.base64);
+
+      // NEW: Intercept and block if multiple distinct food types are detected
+      if (aiData.contains_multiple_food_types) {
+        Alert.alert(
+          "Multiple Foods Detected 🛑",
+          "Please post only one type of food per listing to make claiming easier. If you have different items (e.g., pizza AND salad), please take separate photos and make multiple posts."
+        );
+        // Clear the invalid image so the user is forced to pick a new one
+        setImageUri("");
+        setImageBase64("");
+        return; // Exit the function early
+      }
+
       setAiAnalysisResult(aiData);
 
       // Auto-fill from AI analysis
