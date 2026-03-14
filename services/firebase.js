@@ -3,11 +3,13 @@ import {
     addDoc,
     collection,
     doc,
+    getDoc,
     getDocs,
     getFirestore,
     increment,
     query,
     serverTimestamp,
+    setDoc,
     updateDoc,
     where
 } from "firebase/firestore";
@@ -107,7 +109,6 @@ export async function claimListing(listingId) {
     }).catch(async (error) => {
       // Create the metrics document if it doesn't exist yet (first claim)
       if (error.code === "not-found") {
-        const { setDoc } = require("firebase/firestore");
         await setDoc(metricsRef, {
           mealsSaved: 1,
           wasteReducedKg: 0.35,
@@ -120,6 +121,27 @@ export async function claimListing(listingId) {
     return claimCode;
   } catch (e) {
     console.error("Error claiming listing: ", e);
+    throw e;
+  }
+}
+
+/**
+ * Fetches the total environmental impact metrics for the campus dashboard.
+ * @returns {Promise<Object>} The aggregated metrics data.
+ */
+export async function getImpactStats() {
+  try {
+    const metricsRef = doc(db, "metrics", "campus_totals");
+    const docSnap = await getDoc(metricsRef);
+
+    if (docSnap.exists()) {
+      return docSnap.data();
+    } else {
+      // Return zeros if no items have been claimed yet
+      return { mealsSaved: 0, wasteReducedKg: 0, co2PreventedKg: 0 };
+    }
+  } catch (e) {
+    console.error("Error fetching impact stats: ", e);
     throw e;
   }
 }
