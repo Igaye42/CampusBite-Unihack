@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyABzM-zdA3SG4F5_Lv2ULsuCTSxqBq7hTM"
+  apiKey: "AIzaSyC154baLmkT1wQLAUFiCW7-PE6wM2_hDEM"
 });
 
 export async function analyzeFoodImage(base64Image) {
@@ -16,13 +16,14 @@ export async function analyzeFoodImage(base64Image) {
       "estimated_qty": "Integer. Estimate the total quantity or servings.",
       "estimated_weight_kg": "Float. Estimate the total weight in kilograms.",
       "safety_risk": "Boolean. True ONLY IF this food contains raw meat, raw seafood, or is clearly unrefrigerated dairy.",
-      "suggested_tags": "Array of strings. Select applicable from: [vegetarian, vegan, halal, gluten-free, dairy-free, nut-warning]"
+      "dietary_tags": "Array of strings. Select applicable from: ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'].",
+      "allergen_warnings": "Array of strings. Select ONLY IF visually obvious or highly likely. Options: ['Contains Peanuts', 'Contains Nuts', 'Contains Seafood', 'Contains Dairy', 'Contains Eggs']."
     }
     `;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash", // FIXED: Changed to a widely supported stable model
       contents: [
         prompt,
         { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
@@ -34,7 +35,8 @@ export async function analyzeFoodImage(base64Image) {
 
     return JSON.parse(response.text);
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    // FIXED: Print the full error payload to the terminal so it isn't cut off by the phone UI
+    console.error("Gemini API Error Details:", JSON.stringify(error, null, 2));
     throw error;
   }
 }

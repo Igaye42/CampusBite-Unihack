@@ -17,17 +17,21 @@ import {
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
-  const { id, food_title, qty, location } = useLocalSearchParams<{
+  const { id, food_title, qty, location, safety_risk } = useLocalSearchParams<{
     id?: string;
     food_title?: string;
     qty?: string;
     location?: string;
+    safety_risk?: string;
   }>();
 
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [pickupCode, setPickupCode] = useState("");
   const [recentClaims, setRecentClaims] = useState<any[]>([]);
+
+  // Parse string back to boolean since router params are always strings
+  const isHighRisk = safety_risk === 'true';
 
   useEffect(() => {
     setClaimed(false);
@@ -42,15 +46,11 @@ export default function ClaimScreen() {
     return () => unsubscribe();
   }, []);
 
-  const handleClaim = async () => {
-    if (!id) {
-      Alert.alert("Error", "No listing ID found.");
-      return;
-    }
-
+  const executeClaim = async () => {
     setClaiming(true);
     try {
-      const code = await claimListing(id);
+      // Non-null assertion as id is verified before this function is called
+      const code = await claimListing(id!);
       setPickupCode(code);
       setClaimed(true);
     } catch (error) {
@@ -58,6 +58,27 @@ export default function ClaimScreen() {
       Alert.alert("Error", "Failed to claim food. Please try again.");
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const handleClaimInitiation = () => {
+    if (!id) {
+      Alert.alert("Error", "No listing ID found.");
+      return;
+    }
+
+    // Trigger safety acknowledgment protocol if risk is detected
+    if (isHighRisk) {
+      Alert.alert(
+        "⚠️ Safety Warning",
+        "This item contains raw ingredients or dairy. By claiming this, you acknowledge responsibility for proper refrigeration and safe consumption.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "I Understand & Claim", style: "destructive", onPress: executeClaim }
+        ]
+      );
+    } else {
+      executeClaim();
     }
   };
 
@@ -105,10 +126,19 @@ export default function ClaimScreen() {
             </Text>
           </Pressable>
 
+          {isHighRisk && (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningTitle}>⚠️ High Safety Risk</Text>
+              <Text style={styles.warningText}>
+                Requires immediate refrigeration. Inspect before consuming.
+              </Text>
+            </View>
+          )}
+
           {!claimed ? (
             <Pressable
               style={[styles.button, claiming && { opacity: 0.7 }]}
-              onPress={handleClaim}
+              onPress={handleClaimInitiation}
               disabled={claiming}
             >
               {claiming ? (
@@ -212,6 +242,25 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 16
+  },
+  warningBox: {
+    backgroundColor: "#FFEBEE",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFCDD2",
+    marginBottom: 12
+  },
+  warningTitle: {
+    color: "#C62828",
+    fontWeight: "800",
+    fontSize: 14,
+    marginBottom: 4
+  },
+  warningText: {
+    color: "#C62828",
+    fontSize: 13,
+    fontWeight: "600"
   },
   successBox: {
     marginTop: 16,

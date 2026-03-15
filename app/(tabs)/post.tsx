@@ -1,5 +1,7 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -12,7 +14,6 @@ import {
   TextInput,
   View
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
@@ -28,16 +29,20 @@ export default function PostScreen() {
 
   const [location, setLocation] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [tags, setTags] = useState("");
+  
+  // NEW: Separated tags states
+  const [dietaryTags, setDietaryTags] = useState("");
+  const [allergenWarnings, setAllergenWarnings] = useState("");
+
   const [deadline, setDeadline] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
-const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
 
-    const formatDeadlineDisplay = (date: Date) => {
+  const formatDeadlineDisplay = (date: Date) => {
     return date.toLocaleString([], {
       year: "numeric",
       month: "short",
@@ -46,10 +51,10 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
       minute: "2-digit"
     });
   };
+
   const handlePickImage = async () => {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert(
@@ -81,13 +86,11 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
       const aiData = await analyzeFoodImage(asset.base64);
 
-      // Intercept and block if multiple distinct food types are detected
       if (aiData.contains_multiple_food_types) {
         Alert.alert(
           "Multiple Foods Detected 🛑",
           "Please post only one type of food per listing to make claiming easier. If you have different items (e.g., pizza AND salad), please take separate photos and make multiple posts."
         );
-        // Clear the invalid image so the user is forced to pick a new one
         setImageUri("");
         setImageBase64("");
         return;
@@ -95,13 +98,19 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
       setAiAnalysisResult(aiData);
 
-      // Auto-fill from AI analysis
       setFoodTitle(aiData.food_title || "Unknown Food");
       setCategory(aiData.category || "other");
 
       if (aiData.estimated_qty) setQuantity(String(aiData.estimated_qty));
-      if (aiData.suggested_tags?.length)
-        setTags(aiData.suggested_tags.join(", "));
+      
+      // NEW: Apply separated tags from AI
+      if (aiData.dietary_tags?.length) {
+        setDietaryTags(aiData.dietary_tags.join(", "));
+      }
+      if (aiData.allergen_warnings?.length) {
+        setAllergenWarnings(aiData.allergen_warnings.join(", "));
+      }
+
     } catch (error) {
       console.error("Image analysis failed:", error);
       Alert.alert("AI Error", "Failed to analyze the food image.");
@@ -130,9 +139,7 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
       if (geocode.length > 0) {
         const address = geocode[0];
-        // Combine building name and street name
-        const formattedAddress =
-          `${address.name || ""} ${address.street || ""}`.trim();
+        const formattedAddress = `${address.name || ""} ${address.street || ""}`.trim();
         setLocation(formattedAddress || "Unknown Location");
       }
     } catch (error) {
@@ -160,7 +167,6 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
     try {
       setIsPosting(true);
 
-      // Override the AI's original data with any manual user edits
       const finalData = {
         ...aiAnalysisResult,
         food_title: foodTitle,
@@ -168,32 +174,42 @@ const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
         estimated_qty: quantity
       };
 
-      const listingId = await uploadFoodListing(finalData, location.trim(), {
-  food_title: foodTitle,
-  category: category,
-  estimated_qty: quantity,
-  tags: tags
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean),
-  pickup_deadline: deadline.toISOString()
-});
+      // Ensure manual data correctly overrides AI data and uses new schema
+      await uploadFoodListing(finalData, location.trim(), {
+        food_title: foodTitle,
+        category: category,
+        estimated_qty: quantity,
+        dietary_tags: dietaryTags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        allergen_warnings: allergenWarnings.split(",").map((warn) => warn.trim()).filter(Boolean),
+        pickup_deadline: deadline.toISOString()
+      });
 
       Alert.alert(
         "Success",
-        `Food listing posted successfully.\nListing ID: ${listingId}`
+        "Food listing posted successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset states
+              setImageUri("");
+              setImageBase64("");
+              setAiAnalysisResult(null);
+              setFoodTitle("");
+              setCategory("");
+              setLocation("");
+              setQuantity("");
+              setDietaryTags("");
+              setAllergenWarnings("");
+              setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
+              
+              // NEW: Jump back to home screen
+              router.replace('/');
+            }
+          }
+        ]
       );
 
-      // Clear the form
-      setImageUri("");
-      setImageBase64("");
-      setAiAnalysisResult(null);
-      setFoodTitle("");
-      setCategory("");
-      setLocation("");
-      setQuantity("");
-      setTags("");
-setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -290,35 +306,43 @@ setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
       <Text style={styles.label}>Dietary Tags</Text>
       <TextInput
         style={styles.input}
-        placeholder="Auto-filled from AI, but editable"
-        value={tags}
-        onChangeText={setTags}
+        placeholder="e.g., Vegetarian, Halal"
+        value={dietaryTags}
+        onChangeText={setDietaryTags}
       />
 
-<Text style={styles.label}>Pickup Deadline</Text>
-<Pressable
-  style={styles.input}
-  onPress={() => setShowDeadlinePicker(true)}
->
-  <Text style={{ fontSize: 15, color: "#222" }}>
-    {formatDeadlineDisplay(deadline)}
-  </Text>
-</Pressable>
+      <Text style={[styles.label, { color: '#C62828' }]}>Allergen Warnings</Text>
+      <TextInput
+        style={[styles.input, { borderColor: '#FFCDD2', backgroundColor: '#FFEBEE' }]}
+        placeholder="e.g., Contains Nuts, Contains Dairy"
+        value={allergenWarnings}
+        onChangeText={setAllergenWarnings}
+      />
 
-{showDeadlinePicker && (
-  <DateTimePicker
-    value={deadline}
-    mode="datetime"
-    display="default"
-    minimumDate={new Date()}
-    onChange={(event, selectedDate) => {
-      setShowDeadlinePicker(false);
-      if (selectedDate) {
-        setDeadline(selectedDate);
-      }
-    }}
-  />
-)}
+      <Text style={styles.label}>Pickup Deadline</Text>
+      <Pressable
+        style={styles.input}
+        onPress={() => setShowDeadlinePicker(true)}
+      >
+        <Text style={{ fontSize: 15, color: "#222" }}>
+          {formatDeadlineDisplay(deadline)}
+        </Text>
+      </Pressable>
+
+      {showDeadlinePicker && (
+        <DateTimePicker
+          value={deadline}
+          mode="datetime"
+          display="default"
+          minimumDate={new Date()}
+          onChange={(event, selectedDate) => {
+            setShowDeadlinePicker(false);
+            if (selectedDate) {
+              setDeadline(selectedDate);
+            }
+          }}
+        />
+      )}
 
       <Pressable
         style={[styles.postButton, isPosting && styles.postButtonDisabled]}

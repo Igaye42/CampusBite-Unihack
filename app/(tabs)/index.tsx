@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getAvailableListings, subscribeToAvailableListings } from '../../services/firebase';
 
-const DIETARY_TAGS = ['vegetarian', 'vegan', 'halal', 'gluten-free', 'dairy-free', 'nut-warning'];
+// Updated to match the new exact schema options
+const DIETARY_TAGS = ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'];
 
 function getFoodEmoji(foodTitle: string, category: string) {
   const combined = `${foodTitle} ${category}`.toLowerCase();
@@ -32,46 +33,50 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-useEffect(() => {
-  const unsubscribe = subscribeToAvailableListings((data: any[]) => {
-    const formattedListings = data.map((item: any) => {
-      let pickupByTime = 'N/A';
+  useEffect(() => {
+    const unsubscribe = subscribeToAvailableListings((data: any[]) => {
+      const formattedListings = data.map((item: any) => {
+        let pickupByTime = 'N/A';
 
-      if (item.pickup_deadline) {
-        const deadline = new Date(item.pickup_deadline);
-        pickupByTime = deadline.toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      }
+        if (item.pickup_deadline) {
+          const deadline = new Date(item.pickup_deadline);
+          pickupByTime = deadline.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
 
-      return {
-        id: item.id,
-        food_title: item.food_title || 'Food Item',
-        category: item.category || 'other',
-        quantity: item.estimated_qty || 'Some',
-        weight: item.estimated_weight_kg || 0.35,
-        safety_risk: item.safety_risk || false,
-        location: item.location || 'Unknown Location',
-        pickup_deadline: item.pickup_deadline || null,
-        tags: item.tags || [],
-        pickupBy: pickupByTime,
-      };
+        return {
+          id: item.id,
+          food_title: item.food_title || 'Food Item',
+          category: item.category || 'other',
+          quantity: item.estimated_qty || 'Some',
+          weight: item.estimated_weight_kg || 0.35,
+          safety_risk: item.safety_risk || false,
+          location: item.location || 'Unknown Location',
+          pickup_deadline: item.pickup_deadline || null,
+          // NEW: Splitting tags into dietary and allergens
+          dietary_tags: item.dietary_tags || [],
+          allergen_warnings: item.allergen_warnings || [],
+          pickupBy: pickupByTime,
+        };
+      });
+
+      setListings(formattedListings);
+      setLoading(false);
     });
 
-    setListings(formattedListings);
-    setLoading(false);
-  });
+    return () => unsubscribe();
+  }, []);
 
-  return () => unsubscribe();
-}, []);
-useEffect(() => {
-  const interval = setInterval(() => {
-    setCurrentTime(Date.now());
-  }, 60000); // update every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60000); // update every minute
 
-  return () => clearInterval(interval);
-}, []);
+    return () => clearInterval(interval);
+  }, []);
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
@@ -84,40 +89,61 @@ useEffect(() => {
   };
 
   // Frontend fallback filtering: Remove expired items, apply search text, apply tag filter
-const processedListings = listings
-  .map((item) => {
-    let minutesLeft = 0;
+  const processedListings = listings
+    .map((item) => {
+      let minutesLeft = 0;
 
-    if (item.pickup_deadline) {
-      const deadlineMs = new Date(item.pickup_deadline).getTime();
-      const diffMs = deadlineMs - currentTime;
-      minutesLeft = Math.max(0, Math.floor(diffMs / (1000 * 60)));
-    }
+      if (item.pickup_deadline) {
+        const deadlineMs = new Date(item.pickup_deadline).getTime();
+        const diffMs = deadlineMs - currentTime;
+        minutesLeft = Math.max(0, Math.floor(diffMs / (1000 * 60)));
+      }
 
-    return {
-      ...item,
-      minutesLeft,
-    };
-  })
-  .filter((item) => {
-    // 1. Expiry filter
-    if (item.minutesLeft <= 0) return false;
+      return {
+        ...item,
+        minutesLeft,
+      };
+    })
+    .filter((item) => {
+      // 1. Expiry filter
+      if (item.minutesLeft <= 0) return false;
 
-    // 2. Search query filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchTitle = item.food_title.toLowerCase().includes(query);
-      const matchLocation = item.location.toLowerCase().includes(query);
-      if (!matchTitle && !matchLocation) return false;
-    }
+      // 2. Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchTitle = item.food_title.toLowerCase().includes(query);
+        const matchLocation = item.location.toLowerCase().includes(query);
+        if (!matchTitle && !matchLocation) return false;
+      }
 
-    // 3. Dietary tag filter
-    if (selectedTag) {
-      if (!item.tags || !item.tags.includes(selectedTag)) return false;
-    }
+      // 3. Dietary tag & Safety Override filter
+      if (selectedTag) {
+        const hasDietaryTag = item.dietary_tags && item.dietary_tags.includes(selectedTag);
+        const warnings = item.allergen_warnings || [];
+        let hasAllergenConflict = false;
 
-    return true;
-  });
+        // Strict Safety Overrides: If user wants X-free, actively block if warning contains X
+        if (selectedTag === 'Nut-Free' && (warnings.includes('Contains Nuts') || warnings.includes('Contains Peanuts'))) {
+          hasAllergenConflict = true;
+        }
+        if (selectedTag === 'Dairy-Free' && warnings.includes('Contains Dairy')) {
+          hasAllergenConflict = true;
+        }
+        if (selectedTag === 'Seafood-Free' && warnings.includes('Contains Seafood')) {
+          hasAllergenConflict = true;
+        }
+        if (selectedTag === 'Vegan' && (warnings.includes('Contains Dairy') || warnings.includes('Contains Eggs') || warnings.includes('Contains Seafood'))) {
+          hasAllergenConflict = true;
+        }
+
+        // Hide if there's a danger conflict OR if it simply doesn't have the tag they are looking for
+        if (hasAllergenConflict || !hasDietaryTag) {
+          return false;
+        }
+      }
+
+      return true;
+    });
 
   if (loading && !refreshing) {
     return (
@@ -188,22 +214,37 @@ const processedListings = listings
             <Text style={styles.detail}>⏰ Pickup by {item.pickupBy}</Text>
 
             {item.safety_risk && (
-              <Text style={styles.warningText}>⚠️ High Risk (Needs Refrigerator)</Text>
+              <Text style={styles.safetyRiskText}>⚠️ High Safety Risk (Needs Refrigerator)</Text>
             )}
 
+            {/* NEW: Dietary Tags (Green) */}
             <View style={styles.tagsRow}>
-              {item.tags && item.tags.length > 0 ? (
-                item.tags.map((tag: string, index: number) => (
-                  <View key={index} style={styles.tagPill}>
-                    <Text style={styles.tagText}>{tag}</Text>
+              {item.dietary_tags && item.dietary_tags.length > 0 ? (
+                item.dietary_tags.map((tag: string, index: number) => (
+                  <View key={`diet-${index}`} style={styles.dietaryPill}>
+                    <Text style={styles.dietaryText}>🌱 {tag}</Text>
                   </View>
                 ))
               ) : (
                 <View style={styles.tagPillNeutral}>
-                  <Text style={styles.tagTextNeutral}>no dietary tags</Text>
+                  <Text style={styles.tagTextNeutral}>No specific diet</Text>
                 </View>
               )}
             </View>
+
+            {/* NEW: Allergen Warnings (Red) */}
+            {item.allergen_warnings && item.allergen_warnings.length > 0 && (
+              <View style={styles.warningBox}>
+                <Text style={styles.warningTitle}>⚠️ Contains:</Text>
+                <View style={styles.tagsRow}>
+                  {item.allergen_warnings.map((warning: string, index: number) => (
+                    <View key={`warn-${index}`} style={styles.warningPill}>
+                      <Text style={styles.warningText}>{warning}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
             <Pressable
               style={styles.button}
@@ -215,7 +256,7 @@ const processedListings = listings
                     food_title: item.food_title,
                     qty: String(item.quantity),
                     location: item.location,
-                    safety_risk: String(item.safety_risk) // Pass safety risk state
+                    safety_risk: String(item.safety_risk)
                   },
                 })
               }
@@ -245,13 +286,22 @@ const styles = StyleSheet.create({
   timeBadge: { fontSize: 12, fontWeight: '700', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, overflow: 'hidden' },
   categoryTag: { fontSize: 13, color: '#2E7D32', fontWeight: '600', marginBottom: 8 },
   detail: { fontSize: 15, color: '#4F4F4F', marginBottom: 5 },
-  warningText: { color: '#D32F2F', fontSize: 13, fontWeight: '700', marginTop: 4, marginBottom: 4 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 14, gap: 8 },
-  tagPill: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  tagText: { color: '#2E7D32', fontSize: 12, fontWeight: '700' },
+  safetyRiskText: { color: '#D32F2F', fontSize: 13, fontWeight: '700', marginTop: 4, marginBottom: 4 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4, marginBottom: 8, gap: 8 },
+  
+  // New Dietary Styles
+  dietaryPill: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  dietaryText: { color: '#2E7D32', fontSize: 12, fontWeight: '700' },
   tagPillNeutral: { backgroundColor: '#ECEFF1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   tagTextNeutral: { color: '#607D8B', fontSize: 12, fontWeight: '700' },
-  button: { backgroundColor: '#2E7D32', paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+
+  // New Warning Styles
+  warningBox: { backgroundColor: '#FFEBEE', padding: 10, borderRadius: 8, marginTop: 4, marginBottom: 8, borderWidth: 1, borderColor: '#FFCDD2' },
+  warningTitle: { color: '#C62828', fontWeight: '800', fontSize: 13, marginBottom: 6 },
+  warningPill: { backgroundColor: '#C62828', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  warningText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+
+  button: { backgroundColor: '#2E7D32', paddingVertical: 13, borderRadius: 12, alignItems: 'center', marginTop: 6 },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
