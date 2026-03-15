@@ -58,8 +58,8 @@ latitude: item.latitude || null,
 longitude: item.longitude || null,
           pickup_deadline: item.pickup_deadline || null,
           // NEW: Splitting tags into dietary and allergens
-          dietary_tags: item.dietary_tags || [],
-          allergen_warnings: item.allergen_warnings || [],
+dietary_tags: item.dietary_tags || item.tags || [],
+allergen_warnings: item.allergen_warnings || [],
           pickupBy: pickupByTime,
         };
       });

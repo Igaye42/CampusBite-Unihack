@@ -48,24 +48,26 @@ export async function uploadFoodListing(aiData, locationData, manualData = {}) {
         ? new Date(manualData.pickup_deadline).toISOString()
         : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-    const listing = {
-      food_title: manualData.food_title || aiData.food_title,
-      category: manualData.category || aiData.category,
-      estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
-      estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
-      safety_risk: aiData.safety_risk,
-      tags: finalTags,
+const listing = {
+  food_title: manualData.food_title || aiData.food_title,
+  category: manualData.category || aiData.category,
+  estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
+  estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
+  safety_risk: aiData.safety_risk,
 
-      // NEW
-      location: locationData.locationName,
-      locationName: locationData.locationName,
-      latitude: locationData.latitude,
-      longitude: locationData.longitude,
+  tags: finalTags,
+  dietary_tags: aiData.dietary_tags || finalTags || [],
+  allergen_warnings: aiData.allergen_warnings || [],
 
-      pickup_deadline: finalDeadline,
-      status: "available",
-      createdAt: serverTimestamp()
-    };
+  location: locationData.locationName,
+  locationName: locationData.locationName,
+  latitude: locationData.latitude,
+  longitude: locationData.longitude,
+
+  pickup_deadline: finalDeadline,
+  status: "available",
+  createdAt: serverTimestamp()
+};
 
     const docRef = await addDoc(collection(db, "listings"), listing);
     console.log("Listing successfully created with ID: ", docRef.id);
