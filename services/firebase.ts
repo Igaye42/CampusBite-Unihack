@@ -432,7 +432,10 @@ export function subscribeToUserClaims(userId: string, callback: any) {
     (querySnapshot) => {
       const listings: any[] = [];
       querySnapshot.forEach((doc) => {
-        listings.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        if (!data.claimerHidden) {
+          listings.push({ id: doc.id, ...data });
+        }
       });
 
       // Sort by claimedAt descending
@@ -451,6 +454,32 @@ export function subscribeToUserClaims(userId: string, callback: any) {
   );
 
   return unsubscribe;
+}
+
+/**
+ * Marks all claimed listings as hidden for the claimer.
+ */
+export async function clearUserClaims(userId: string) {
+  try {
+    const q = query(
+      collection(db, "listings"),
+      where("claimerId", "==", userId),
+      where("status", "==", "claimed")
+    );
+    
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    
+    snap.forEach((doc) => {
+      batch.update(doc.ref, { claimerHidden: true });
+    });
+    
+    await batch.commit();
+    console.log(`Cleared ${snap.size} claims for user ${userId}`);
+  } catch (error) {
+    console.error("Error clearing claims:", error);
+    throw error;
+  }
 }
 
 /**

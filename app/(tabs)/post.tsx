@@ -388,21 +388,20 @@ export default function PostScreen() {
         >
           <View style={styles.sectionHeaderLeft}>
             <Text style={styles.sectionTitle}>Recent Activity</Text>
-          </View>
-          <View style={styles.sectionHeaderRight}>
             <Ionicons 
               name={showRecentActivity ? "chevron-down" : "chevron-forward"} 
-              size={18} 
+              size={16} 
               color="#5C6F65" 
+              style={{ marginLeft: 6 }}
             />
           </View>
-        </Pressable>
-        
-        {/* Clear button moved outside or kept inside if desired, user said 'Recent Activity' as a togglable dropdown */}
-        {showRecentActivity && userListings.some(l => l.status === 'claimed') && (
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, marginBottom: 8 }}>
+          
+          {showRecentActivity && userListings.some(l => l.status === 'claimed') && (
             <Pressable 
-              onPress={handleClearClaimed}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleClearClaimed();
+              }}
               style={({ pressed }) => [
                 styles.clearButton,
                 pressed && { opacity: 0.7 }
@@ -415,8 +414,8 @@ export default function PostScreen() {
                 <Text style={styles.clearButtonText}>Clear</Text>
               )}
             </Pressable>
-          </View>
-        )}
+          )}
+        </Pressable>
 
         {showRecentActivity && (
           <ScrollView contentContainerStyle={styles.listingsList}>
@@ -426,30 +425,51 @@ export default function PostScreen() {
                   <View style={styles.listingInfo}>
                     <Text style={styles.listingTitle}>{listing.food_title}</Text>
                     <Text style={styles.listingMeta}>
-                      {listing.locationName} • {listing.status}
+                      {listing.locationName}{listing.status === 'available' ? ` • ${listing.status}` : ''}
                     </Text>
+                    
                     {listing.status === 'claimed' && (
-                      <View style={[styles.claimedInfoRow, { marginTop: 8 }]}>
-                        <View style={styles.claimerLabelBox}>
-                          <Text style={styles.claimerLabel}>Claimed by</Text>
+                      <View style={{ marginTop: 10 }}>
+                        <View style={styles.claimerAttributionRow}>
+                          <Text style={styles.claimerAttributionLabel}>Claimed by</Text>
+                          <View style={styles.claimerProfile}>
+                            {listing.claimerAvatar ? (
+                              <Image source={{ uri: listing.claimerAvatar }} style={styles.claimerAvatar} />
+                            ) : (
+                              <View style={styles.claimerAvatarPlaceholder}>
+                                <Text style={styles.claimerAvatarText}>
+                                  {listing.claimerName?.charAt(0).toUpperCase() || "?"}
+                                </Text>
+                              </View>
+                            )}
+                            <Text style={styles.claimerName} numberOfLines={1}>
+                              {listing.claimerName || "Someone"}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.claimerProfile}>
-                          {listing.claimerAvatar ? (
-                            <Image source={{ uri: listing.claimerAvatar }} style={styles.claimerAvatar} />
-                          ) : (
-                            <View style={styles.claimerAvatarPlaceholder}>
-                              <Text style={styles.claimerAvatarText}>
-                                {listing.claimerName?.charAt(0).toUpperCase() || "?"}
-                              </Text>
-                            </View>
-                          )}
-                          <Text style={styles.claimerName} numberOfLines={1}>
-                            {listing.claimerName || "Someone"}
+                        {listing.claim_code && (
+                          <Text style={styles.pickupCodeMeta}>
+                            Pickup Code: {listing.claim_code}
                           </Text>
-                        </View>
+                        )}
+                        {listing.claimedAt && (
+                          <Text style={styles.listingTime}>
+                            Claimed at{" "}
+                            {new Date(listing.claimedAt.toMillis()).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </Text>
+                        )}
                       </View>
                     )}
                   </View>
+
+                  {listing.status === 'claimed' && (
+                    <View style={styles.topRightClaimedBadge}>
+                      <Text style={styles.claimedBadgeText}>Claimed</Text>
+                    </View>
+                  )}
                   {listing.status === 'available' && (
                     <View style={styles.actionRow}>
                       <Pressable style={styles.editButton} onPress={() => startEditing(listing)}>
@@ -709,8 +729,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginTop: 8,
+    marginTop: 12,
     marginBottom: 8,
+    minHeight: 32, // Prevent jumping when clear button appears
   },
   sectionHeaderLeft: {
     flexDirection: "row",
@@ -747,6 +768,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E0E7E0",
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  topRightClaimedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: "#ECEFF1",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  claimedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#607D8B",
+    textTransform: "uppercase",
   },
   listingInfo: {
     flex: 1,
@@ -784,33 +822,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  claimedInfoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  claimerLabelBox: {
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  claimerLabel: {
-    color: "#757575",
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
+
   claimerProfile: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: "#F1F8F5",
-    padding: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#E8F5E9",
-    maxWidth: 120,
+    maxWidth: 160,
   },
   claimerAvatar: {
     width: 20,
@@ -830,10 +853,33 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
-  claimerName: {
-    fontSize: 11,
-    color: "#1B4332",
+  claimerAttributionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  claimerAttributionLabel: {
+    fontSize: 12,
+    color: "#757575",
     fontWeight: "600",
+  },
+  claimerName: {
+    fontSize: 12,
+    color: "#1B4332",
+    fontWeight: "700",
+  },
+  pickupCodeMeta: {
+    fontSize: 12,
+    color: "#2E7D32",
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  listingTime: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
+    marginTop: 2,
   },
   actionRow: {
     flexDirection: "row",

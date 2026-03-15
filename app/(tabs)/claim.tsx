@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -9,18 +9,20 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View
+  View,
+  Image
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "../../context/AuthContext";
 import {
   claimListing,
-  subscribeToUserClaims
+  subscribeToUserClaims,
+  clearUserClaims
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
   const { user } = useAuth();
-  // FIXED: Added safety_risk to the destructured object and its type definition
+  
   const {
     id,
     food_title,
@@ -29,7 +31,9 @@ export default function ClaimScreen() {
     locationDetails,
     latitude,
     longitude,
-    safety_risk
+    safety_risk,
+    uploaderName,
+    uploaderAvatar
   } = useLocalSearchParams<{
     id?: string;
     food_title?: string;
@@ -39,6 +43,8 @@ export default function ClaimScreen() {
     latitude?: string;
     longitude?: string;
     safety_risk?: string;
+    uploaderName?: string;
+    uploaderAvatar?: string;
   }>();
 
   const [claiming, setClaiming] = useState(false);
@@ -46,6 +52,7 @@ export default function ClaimScreen() {
   const [pickupCode, setPickupCode] = useState("");
   const [recentClaims, setRecentClaims] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(true);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Parse string back to boolean since router params are always strings
   const isHighRisk = safety_risk === 'true';
@@ -64,6 +71,32 @@ export default function ClaimScreen() {
       return () => unsubscribe();
     }
   }, [user]);
+
+  const handleClearHistory = async () => {
+    if (!user) return;
+    
+    Alert.alert(
+      "Clear History",
+      "Are you sure you want to clear your recently claimed history? This will hide them from this view.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Clear", 
+          style: "destructive", 
+          onPress: async () => {
+            setIsClearing(true);
+            try {
+              await clearUserClaims(user.uid);
+            } catch (error) {
+              Alert.alert("Error", "Failed to clear history.");
+            } finally {
+              setIsClearing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const executeClaim = async () => {
     setClaiming(true);
@@ -145,6 +178,29 @@ export default function ClaimScreen() {
 
       {id && (
         <View style={styles.card}>
+          <Pressable 
+            style={styles.closeCardButton} 
+            onPress={() => router.replace('/(tabs)/claim')}
+          >
+            <Ionicons name="close-circle" size={26} color="#B0BEB4" />
+          </Pressable>
+
+          <View style={styles.uploaderBar}>
+            <Text style={styles.fromLabel}>From</Text>
+            <View style={styles.posterProfile}>
+              {uploaderAvatar ? (
+                <Image source={{ uri: uploaderAvatar }} style={styles.posterAvatar} />
+              ) : (
+                <View style={styles.posterAvatarPlaceholder}>
+                  <Text style={styles.posterAvatarText}>
+                    {uploaderName?.charAt(0).toUpperCase() || "S"}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.posterName}>{uploaderName || "Student"}</Text>
+            </View>
+          </View>
+
           <Text style={styles.title}>{food_title || "Food Item"}</Text>
           <Text style={styles.detail}>
             📦 {qty ? `${qty} items` : "Unknown quantity"}
@@ -199,12 +255,33 @@ export default function ClaimScreen() {
       >
         <View style={styles.historyHeaderLeft}>
           <Text style={styles.historyHeaderText}>Your Recently Claimed</Text>
+          <Ionicons 
+            name={showHistory ? "chevron-down" : "chevron-forward"} 
+            size={16} 
+            color="#5C6F65" 
+            style={{ marginLeft: 6 }}
+          />
         </View>
-        <Ionicons 
-          name={showHistory ? "chevron-down" : "chevron-forward"} 
-          size={18} 
-          color="#5C6F65" 
-        />
+
+        {showHistory && recentClaims.length > 0 && (
+          <Pressable 
+            onPress={(e) => {
+              e.stopPropagation();
+              handleClearHistory();
+            }}
+            style={({ pressed }) => [
+              styles.clearButton,
+              pressed && { opacity: 0.7 }
+            ]}
+            disabled={isClearing}
+          >
+            {isClearing ? (
+              <ActivityIndicator size="small" color="#2E7D32" />
+            ) : (
+              <Text style={styles.clearButtonText}>Clear</Text>
+            )}
+          </Pressable>
+        )}
       </Pressable>
 
       {showHistory && (
@@ -213,31 +290,52 @@ export default function ClaimScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.historyCard}>
+              <View style={styles.topRightClaimedBadge}>
+                <Text style={styles.claimedBadgeText}>Claimed</Text>
+              </View>
+
               <View style={styles.historyTopRow}>
                 <Text style={styles.historyTitle}>
                   {item.food_title || item.category || "Food"}
                 </Text>
-                <View style={styles.claimedBadge}>
-                  <Text style={styles.claimedText}>Claimed</Text>
+              </View>
+
+              <Text style={styles.historyDetail}>
+                {item.location || "Unknown Location"}
+              </Text>
+              
+              <View style={styles.historyUploaderBar}>
+                <Text style={styles.historyFromLabel}>From</Text>
+                <View style={styles.posterProfile}>
+                  {item.uploaderAvatar ? (
+                    <Image source={{ uri: item.uploaderAvatar }} style={styles.posterAvatar} />
+                  ) : (
+                    <View style={styles.posterAvatarPlaceholder}>
+                      <Text style={styles.posterAvatarText}>
+                        {item.uploaderName?.charAt(0).toUpperCase() || "S"}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.posterName}>{item.uploaderName || "Student"}</Text>
                 </View>
               </View>
-              <Text style={styles.historyDetail}>
-                📍 {item.location || "Unknown Location"}
-              </Text>
-              {item.claimedAt && (
-                <Text style={styles.historyTime}>
-                  Claimed at{" "}
-                  {new Date(item.claimedAt.toMillis()).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })}
-                </Text>
-              )}
-              {item.claim_code && (
-                <Text style={[styles.historyDetail, { color: "#2E7D32", fontWeight: "700", marginTop: 4 }]}>
-                  Pickup Code: {item.claim_code}
-                </Text>
-              )}
+
+              <View>
+                {item.claim_code && (
+                  <Text style={styles.historyPickupCode}>
+                    Pickup Code: {item.claim_code}
+                  </Text>
+                )}
+                {item.claimedAt && (
+                  <Text style={styles.historyTime}>
+                    Claimed at{" "}
+                    {new Date(item.claimedAt.toMillis()).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })}
+                  </Text>
+                )}
+              </View>
             </View>
           )}
           contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
@@ -275,6 +373,20 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 12,
     paddingHorizontal: 4,
+    minHeight: 32, // Prevent jumping
+  },
+  clearButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#DDE5DB",
+    backgroundColor: "#fff",
+  },
+  clearButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2E7D32",
   },
   historyHeaderLeft: {
     flexDirection: "row",
@@ -291,7 +403,71 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 16,
     borderRadius: 16,
-    elevation: 3
+    elevation: 3,
+    position: 'relative',
+  },
+  closeCardButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  uploaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  fromLabel: {
+    fontSize: 14,
+    color: "#5C6F65",
+    fontWeight: "600",
+  },
+  historyUploaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 6,
+    gap: 6,
+  },
+  historyFromLabel: {
+    fontSize: 12,
+    color: "#757575",
+    fontWeight: "600",
+  },
+  posterProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F1F8F5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+  },
+  posterAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  posterAvatarPlaceholder: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#2E7D32",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  posterAvatarText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  posterName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1B4332",
   },
   title: {
     fontSize: 22,
@@ -308,7 +484,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     backgroundColor: "#2E7D32",
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center"
   },
   buttonText: {
@@ -354,46 +530,58 @@ const styles = StyleSheet.create({
   },
   historyCard: {
     backgroundColor: "#fff",
+    padding: 16,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E0E0E0"
+    borderColor: "#E0E7E0",
+    position: 'relative',
+    overflow: 'hidden',
   },
   historyTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6
+    paddingRight: 60,
   },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    flex: 1,           // Forces the text to shrink and wrap instead of pushing the badge
-    marginRight: 10,   // Adds a gap between the long text and the badge
-  },
-  claimedBadge: {
+  topRightClaimedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
     backgroundColor: "#ECEFF1",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    flexShrink: 0,     // Prevents the badge itself from being squished
   },
-  claimedText: {
+  claimedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#607D8B",
+    textTransform: "uppercase",
+  },
+  historyPickupCode: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#607D8B"
+    color: "#2E7D32",
+    fontWeight: "800",
+    marginTop: 2,
   },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1B4332",
+    flex: 1,
+  },
+
   historyDetail: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 4
+    fontSize: 12,
+    color: "#5C6F65",
+    marginTop: 2,
   },
   historyTime: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#999",
-    fontStyle: "italic"
+    fontStyle: "italic",
+    marginTop: 2,
   },
   emptyContainer: {
     alignItems: "center",

@@ -307,7 +307,9 @@ return {
                       locationDetails: item.locationDetails || "",
                       latitude: item.latitude ? String(item.latitude) : "",
                       longitude: item.longitude ? String(item.longitude) : "",
-                      safety_risk: String(item.safety_risk)
+                      safety_risk: String(item.safety_risk),
+                      uploaderName: item.uploaderName,
+                      uploaderAvatar: item.uploaderAvatar || ""
                     },
                   })
                 }
@@ -402,7 +404,7 @@ const styles = StyleSheet.create({
   warningPill: { backgroundColor: '#C62828', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   warningText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
-  button: { backgroundColor: '#2E7D32', paddingVertical: 13, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  button: { backgroundColor: '#2E7D32', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 6 },
   buttonRow: { flexDirection: 'row', alignItems: 'center' },
   disabledButton: { backgroundColor: '#E0E0E0' },
   disabledButtonText: { color: '#9E9E9E' },
