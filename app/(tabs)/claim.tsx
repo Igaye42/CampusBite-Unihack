@@ -315,13 +315,16 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333"
+    color: "#333",
+    flex: 1,           // Forces the text to shrink and wrap instead of pushing the badge
+    marginRight: 10,   // Adds a gap between the long text and the badge
   },
   claimedBadge: {
     backgroundColor: "#ECEFF1",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999
+    borderRadius: 999,
+    flexShrink: 0,     // Prevents the badge itself from being squished
   },
   claimedText: {
     fontSize: 12,
