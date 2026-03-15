@@ -97,6 +97,10 @@ export default function AccountScreen() {
 
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
+          <Text style={styles.statNumber}>{studentData?.posts || 0}</Text>
+          <Text style={styles.statLabel}>Posts</Text>
+        </View>
+        <View style={[styles.statBox, styles.statBorder]}>
           <Text style={styles.statNumber}>{studentData?.claims || 0}</Text>
           <Text style={styles.statLabel}>Claims</Text>
         </View>

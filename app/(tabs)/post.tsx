@@ -15,11 +15,14 @@ import {
   View
 } from "react-native";
 
-import { uploadFoodListing } from "../../services/firebase";
+import { uploadFoodListing, subscribeToUserListings } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
 import LocationAutocomplete, {
   SelectedLocation
 } from "../../components/LocationAutocomplete";
+import { useAuth } from "../../context/AuthContext";
+import { useEffect } from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
 const DIETARY_OPTIONS = [
@@ -38,8 +41,11 @@ const WARNING_OPTIONS = [
   "Contains Dairy",
   "Contains Eggs"
 ];
-
 export default function PostScreen() {
+  const { user, studentData } = useAuth();
+  const [isCreatingListing, setIsCreatingListing] = useState(false);
+  const [userListings, setUserListings] = useState<any[]>([]);
+
   const [imageUri, setImageUri] = useState("");
   const [imageBase64, setImageBase64] = useState("");
 
@@ -61,6 +67,31 @@ export default function PostScreen() {
   const [isPosting, setIsPosting] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
+
+  useEffect(() => {
+    if (user) {
+      const unsubscribe = subscribeToUserListings(user.uid, (data: any[]) => {
+        setUserListings(data);
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
+
+  const resetForm = () => {
+    setImageUri("");
+    setImageBase64("");
+    setAiAnalysisResult(null);
+    setFoodTitle("");
+    setCategory("");
+    setLocationInput("");
+    setSelectedLocation(null);
+    setLocationDetails("");
+    setQuantity("");
+    setDietaryTags([]);
+    setAllergenWarnings([]);
+    setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
+    setIsCreatingListing(false);
+  };
 
   const formatDeadlineDisplay = (date: Date) => {
     return date.toLocaleString([], {
@@ -198,33 +229,27 @@ export default function PostScreen() {
         estimated_qty: quantity
       };
 
-      await uploadFoodListing(finalData, selectedLocation, {
-        food_title: foodTitle,
-        category,
-        estimated_qty: quantity,
-        dietary_tags: dietaryTags,
-        allergen_warnings: allergenWarnings,
-        pickup_deadline: deadline.toISOString(),
-        locationDetails: locationDetails.trim()
-      });
+      await uploadFoodListing(
+        finalData, 
+        selectedLocation, 
+        {
+          food_title: foodTitle,
+          category,
+          estimated_qty: quantity,
+          dietary_tags: dietaryTags,
+          allergen_warnings: allergenWarnings,
+          pickup_deadline: deadline.toISOString(),
+          locationDetails: locationDetails.trim()
+        },
+        user!.uid,
+        studentData?.displayName || "Anonymous"
+      );
 
       Alert.alert("Success", "Food listing posted successfully.", [
         {
           text: "OK",
           onPress: () => {
-            setImageUri("");
-            setImageBase64("");
-            setAiAnalysisResult(null);
-            setFoodTitle("");
-            setCategory("");
-            setLocationInput("");
-            setSelectedLocation(null);
-            setLocationDetails("");
-            setQuantity("");
-            setDietaryTags([]);
-            setAllergenWarnings([]);
-            setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
-            router.replace("/");
+            resetForm();
           }
         }
       ]);
@@ -236,181 +261,389 @@ export default function PostScreen() {
     }
   };
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Post Food</Text>
-      <Text style={styles.subheading}>
-        Upload leftover food and let AI classify it
-      </Text>
-
-      <Text style={styles.label}>Upload Photo</Text>
-      <Pressable style={styles.photoButton} onPress={handlePickImage}>
-        <Text style={styles.photoButtonText}>
-          {imageUri ? "Change Photo" : "Choose Photo"}
-        </Text>
-      </Pressable>
-
-      {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} /> : null}
-
-      {isAnalyzing ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color="#2E7D32" />
-          <Text style={styles.loadingText}>Analyzing food image...</Text>
+  if (!isCreatingListing) {
+    return (
+      <View style={styles.dashboardContainer}>
+        <View style={styles.dashboardHeader}>
+          <Text style={styles.heading}>Your Listings</Text>
+          <Text style={styles.subheading}>Manage your active food shares</Text>
         </View>
-      ) : null}
 
-      <Text style={styles.label}>Specific Food</Text>
-      <TextInput
-        style={styles.input}
-        value={foodTitle}
-        onChangeText={setFoodTitle}
-        placeholder="e.g. Cheese Pizza"
-        placeholderTextColor="#6B7280"
-      />
+        <Pressable 
+          style={styles.heroPostButton} 
+          onPress={() => setIsCreatingListing(true)}
+        >
+          <View style={styles.heroPostContent}>
+            <View style={styles.heroPostIcon}>
+              <Ionicons name="add" size={32} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.heroPostTitle}>Post New Food</Text>
+              <Text style={styles.heroPostSub}>Reduce waste in seconds</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#2E7D32" />
+        </Pressable>
 
-      <Text style={styles.label}>Category</Text>
-      <View style={styles.categoryRow}>
-        {CATEGORIES.map((cat) => (
-          <Pressable
-            key={cat}
-            style={[styles.categoryPill, category === cat && styles.categoryPillActive]}
-            onPress={() => setCategory(cat)}
-          >
-            <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>
-              {cat}
-            </Text>
-          </Pressable>
-        ))}
+        <Text style={styles.sectionTitle}>Recent Activity</Text>
+        <ScrollView contentContainerStyle={styles.listingsList}>
+          {userListings.length > 0 ? (
+            userListings.map((listing) => (
+              <View key={listing.id} style={styles.listingCard}>
+                <View style={styles.listingInfo}>
+                  <Text style={styles.listingTitle}>{listing.food_title}</Text>
+                  <Text style={styles.listingMeta}>
+                    {listing.locationName} • {listing.status}
+                  </Text>
+                </View>
+                {listing.status === 'available' ? (
+                  <View style={styles.statusBadgeAvailable}>
+                    <Text style={styles.statusTextAvailable}>Active</Text>
+                  </View>
+                ) : (
+                  <View style={styles.statusBadgeClaimed}>
+                    <Text style={styles.statusTextClaimed}>Claimed</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="fast-food-outline" size={48} color="#DDE5DB" />
+              <Text style={styles.emptyStateText}>No listings yet.</Text>
+              <Text style={styles.emptyStateSub}>Start by posting some leftover food!</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.formHeader}>
+        <Pressable onPress={() => setIsCreatingListing(false)} style={styles.backButton}>
+          <Ionicons name="close" size={24} color="#1B4332" />
+        </Pressable>
+        <Text style={styles.formHeaderText}>New Listing</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.locationHeaderRow}>
-        <Text style={styles.label}>Pickup Location</Text>
-        <Pressable onPress={handleGetCurrentLocation} disabled={isFetchingLocation}>
-          <Text style={styles.currentLocationText}>
-            {isFetchingLocation ? "Locating..." : "📍 Use Current"}
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.label}>Upload Photo</Text>
+        <Pressable style={styles.photoButton} onPress={handlePickImage}>
+          <Text style={styles.photoButtonText}>
+            {imageUri ? "Change Photo" : "Choose Photo"}
           </Text>
         </Pressable>
-      </View>
 
-      <LocationAutocomplete
-        value={locationInput}
-        onChangeText={(text) => {
-          setLocationInput(text);
-          setSelectedLocation(null);
-        }}
-        onSelectLocation={(location) => {
-          setSelectedLocation(location);
-        }}
-      />
+        {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} /> : null}
 
-      {selectedLocation && (
-        <View style={styles.selectedLocationBox}>
-          <Text style={styles.selectedLocationText}>
-            ✅ Selected: {selectedLocation.locationName}
-          </Text>
-          <Text style={styles.selectedLocationSubtext}>
-            {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
-          </Text>
-        </View>
-      )}
+        {isAnalyzing ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color="#2E7D32" />
+            <Text style={styles.loadingText}>Analyzing food image...</Text>
+          </View>
+        ) : null}
 
-      <Text style={styles.label}>Floor / Room Details (Optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={locationDetails}
-        onChangeText={setLocationDetails}
-        placeholder="e.g. Level 2, Room 214"
-        placeholderTextColor="#6B7280"
-      />
+        <Text style={styles.label}>Specific Food</Text>
+        <TextInput
+          style={styles.input}
+          value={foodTitle}
+          onChangeText={setFoodTitle}
+          placeholder="e.g. Cheese Pizza"
+          placeholderTextColor="#6B7280"
+        />
 
-      <Text style={styles.label}>Quantity</Text>
-      <TextInput
-        style={styles.input}
-        value={quantity}
-        onChangeText={setQuantity}
-        keyboardType="numeric"
-        placeholder="e.g. 5"
-        placeholderTextColor="#6B7280"
-      />
-
-      <Text style={styles.label}>Dietary Tags</Text>
-      <View style={styles.tagsContainer}>
-        {DIETARY_OPTIONS.map((tag) => (
-          <Pressable
-            key={tag}
-            style={[styles.tagPill, dietaryTags.includes(tag) && styles.tagPillActive]}
-            onPress={() => toggleDietaryTag(tag)}
-          >
-            <Text style={[styles.tagText, dietaryTags.includes(tag) && styles.tagTextActive]}>
-              {tag}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <Text style={[styles.label, { color: "#C62828", marginTop: 16 }]}>
-        Allergen Warnings
-      </Text>
-      <View style={styles.tagsContainer}>
-        {WARNING_OPTIONS.map((warn) => (
-          <Pressable
-            key={warn}
-            style={[
-              styles.warningPill,
-              allergenWarnings.includes(warn) && styles.warningPillActive
-            ]}
-            onPress={() => toggleWarning(warn)}
-          >
-            <Text
-              style={[
-                styles.warningTextPill,
-                allergenWarnings.includes(warn) && styles.warningTextActive
-              ]}
+        <Text style={styles.label}>Category</Text>
+        <View style={styles.categoryRow}>
+          {CATEGORIES.map((cat) => (
+            <Pressable
+              key={cat}
+              style={[styles.categoryPill, category === cat && styles.categoryPillActive]}
+              onPress={() => setCategory(cat)}
             >
-              {warn}
+              <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>
+                {cat}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.locationHeaderRow}>
+          <Text style={styles.label}>Pickup Location</Text>
+          <Pressable onPress={handleGetCurrentLocation} disabled={isFetchingLocation}>
+            <Text style={styles.currentLocationText}>
+              {isFetchingLocation ? "Locating..." : "📍 Use Current"}
             </Text>
           </Pressable>
-        ))}
-      </View>
+        </View>
 
-      <Text style={styles.label}>Pickup Deadline</Text>
-      <Pressable style={styles.input} onPress={() => setShowDeadlinePicker(true)}>
-        <Text style={{ fontSize: 15, color: "#222" }}>{formatDeadlineDisplay(deadline)}</Text>
-      </Pressable>
-
-      {showDeadlinePicker && (
-        <DateTimePicker
-          value={deadline}
-          mode="datetime"
-          display="default"
-          minimumDate={new Date()}
-          onChange={(event, selectedDate) => {
-            setShowDeadlinePicker(false);
-            if (selectedDate) setDeadline(selectedDate);
+        <LocationAutocomplete
+          value={locationInput}
+          onChangeText={(text) => {
+            setLocationInput(text);
+            setSelectedLocation(null);
+          }}
+          onSelectLocation={(location) => {
+            setSelectedLocation(location);
           }}
         />
-      )}
 
-      <Pressable
-        style={[styles.postButton, isPosting && styles.postButtonDisabled]}
-        onPress={handlePost}
-        disabled={isPosting}
-      >
-        {isPosting ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.postButtonText}>Post Food</Text>
+        {selectedLocation && (
+          <View style={styles.selectedLocationBox}>
+            <Text style={styles.selectedLocationText}>
+              ✅ Selected: {selectedLocation.locationName}
+            </Text>
+            <Text style={styles.selectedLocationSubtext}>
+              {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+            </Text>
+          </View>
         )}
-      </Pressable>
-    </ScrollView>
+
+        <Text style={styles.label}>Floor / Room Details (Optional)</Text>
+        <TextInput
+          style={styles.input}
+          value={locationDetails}
+          onChangeText={setLocationDetails}
+          placeholder="e.g. Level 2, Room 214"
+          placeholderTextColor="#6B7280"
+        />
+
+        <Text style={styles.label}>Quantity</Text>
+        <TextInput
+          style={styles.input}
+          value={quantity}
+          onChangeText={setQuantity}
+          keyboardType="numeric"
+          placeholder="e.g. 5"
+          placeholderTextColor="#6B7280"
+        />
+
+        <Text style={styles.label}>Dietary Tags</Text>
+        <View style={styles.tagsContainer}>
+          {DIETARY_OPTIONS.map((tag) => (
+            <Pressable
+              key={tag}
+              style={[styles.tagPill, dietaryTags.includes(tag) && styles.tagPillActive]}
+              onPress={() => toggleDietaryTag(tag)}
+            >
+              <Text style={[styles.tagText, dietaryTags.includes(tag) && styles.tagTextActive]}>
+                {tag}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={[styles.label, { color: "#C62828", marginTop: 16 }]}>
+          Allergen Warnings
+        </Text>
+        <View style={styles.tagsContainer}>
+          {WARNING_OPTIONS.map((warn) => (
+            <Pressable
+              key={warn}
+              style={[
+                styles.warningPill,
+                allergenWarnings.includes(warn) && styles.warningPillActive
+              ]}
+              onPress={() => toggleWarning(warn)}
+            >
+              <Text
+                style={[
+                  styles.warningTextPill,
+                  allergenWarnings.includes(warn) && styles.warningTextActive
+                ]}
+              >
+                {warn}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Pickup Deadline</Text>
+        <Pressable style={styles.input} onPress={() => setShowDeadlinePicker(true)}>
+          <Text style={{ fontSize: 15, color: "#222" }}>{formatDeadlineDisplay(deadline)}</Text>
+        </Pressable>
+
+        {showDeadlinePicker && (
+          <DateTimePicker
+            value={deadline}
+            mode="datetime"
+            display="default"
+            minimumDate={new Date()}
+            onChange={(event, selectedDate) => {
+              setShowDeadlinePicker(false);
+              if (selectedDate) setDeadline(selectedDate);
+            }}
+          />
+        )}
+
+        <Pressable
+          style={[styles.postButton, isPosting && styles.postButtonDisabled]}
+          onPress={handlePost}
+          disabled={isPosting}
+        >
+          {isPosting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.postButtonText}>Post Food</Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
+  dashboardContainer: {
+    flex: 1,
     backgroundColor: "#F6F9F4",
-    padding: 16
+  },
+  dashboardHeader: {
+    padding: 20,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E7E0",
+  },
+  heroPostButton: {
+    backgroundColor: "#fff",
+    margin: 16,
+    padding: 20,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  heroPostContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  heroPostIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#2E7D32",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroPostTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1B4332",
+  },
+  heroPostSub: {
+    fontSize: 14,
+    color: "#5C6F65",
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#5C6F65",
+    textTransform: "uppercase",
+    marginLeft: 20,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  listingsList: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  listingCard: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E0E7E0",
+  },
+  listingInfo: {
+    flex: 1,
+  },
+  listingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1B4332",
+  },
+  listingMeta: {
+    fontSize: 12,
+    color: "#5C6F65",
+    marginTop: 2,
+    textTransform: "capitalize",
+  },
+  statusBadgeAvailable: {
+    backgroundColor: "#E8F5E9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusTextAvailable: {
+    color: "#2E7D32",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statusBadgeClaimed: {
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusTextClaimed: {
+    color: "#9E9E9E",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 60,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#5C6F65",
+    marginTop: 16,
+  },
+  emptyStateSub: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E7E0",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F6F9F4",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  formHeaderText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1B4332",
+  },
+  container: {
+    padding: 16,
+    paddingBottom: 40,
   },
   heading: {
     fontSize: 26,
@@ -420,8 +653,7 @@ const styles = StyleSheet.create({
   subheading: {
     fontSize: 14,
     color: "#5C6F65",
-    marginTop: 4,
-    marginBottom: 16
+    marginTop: 4
   },
   label: {
     fontSize: 15,

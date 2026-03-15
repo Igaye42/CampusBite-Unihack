@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp, getApps } from "firebase/app";
 import {
   addDoc,
   collection,
@@ -38,13 +38,19 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase and Firestore
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 
 // Initialize Firebase Auth with React Native persistence to prevent warnings/errors
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+let _auth;
+try {
+  _auth = getAuth(app);
+} catch (e) {
+  _auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+}
+export const auth = _auth;
 
 /**
  * Registers a new student and initializes their profile with preferences.
@@ -64,6 +70,7 @@ export async function registerStudent(email: string, password: string, profileDa
       preferencesSet: false,
       credits: 0,
       claims: 0,
+      posts: 0,
       createdAt: serverTimestamp()
     });
 
@@ -167,7 +174,7 @@ export async function updateStudentProfile(userId: string, currentEmail: string,
  * @param {Object} manualData - Optional manual overrides from the frontend.
  * @returns {Promise<String>} The generated document ID.
  */
-export async function uploadFoodListing(aiData: any, locationData: any, manualData: any = {}) {
+export async function uploadFoodListing(aiData: any, locationData: any, manualData: any = {}, uploaderId: string, uploaderName: string) {
   try {
     const finalDeadline =
       manualData.pickup_deadline &&
@@ -193,6 +200,8 @@ export async function uploadFoodListing(aiData: any, locationData: any, manualDa
 
       pickup_deadline: finalDeadline,
       status: "available",
+      uploaderId,
+      uploaderName,
       createdAt: serverTimestamp()
     };
 
@@ -292,6 +301,41 @@ export function subscribeToAvailableListings(callback: any) {
     },
     (error) => {
       console.error("Error listening to listings: ", error);
+    }
+  );
+
+  return unsubscribe;
+}
+
+/**
+ * Sets up a real-time listener for listings created by a specific user.
+ */
+export function subscribeToUserListings(userId: string, callback: any) {
+  const q = query(
+    collection(db, "listings"),
+    where("uploaderId", "==", userId)
+  );
+
+  const unsubscribe = onSnapshot(
+    q,
+    (querySnapshot) => {
+      const listings: any[] = [];
+      querySnapshot.forEach((doc) => {
+        listings.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Sort by creation time descending
+      listings.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return bTime - aTime;
+      });
+
+      console.log(`User listings update: ${listings.length} items.`);
+      callback(listings);
+    },
+    (error) => {
+      console.error("Error listening to user listings: ", error);
     }
   );
 
