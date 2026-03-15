@@ -1,5 +1,7 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -12,13 +14,15 @@ import {
   TextInput,
   View
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
-import LocationAutocomplete from "../../components/LocationAutocomplete";
 
 const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
+
+// NEW: Define standardized options matching our Gemini Schema
+const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'];
+const WARNING_OPTIONS = ['Contains Peanuts', 'Contains Nuts', 'Contains Seafood', 'Contains Dairy', 'Contains Eggs'];
 
 export default function PostScreen() {
   const [imageUri, setImageUri] = useState("");
@@ -27,18 +31,14 @@ export default function PostScreen() {
   const [foodTitle, setFoodTitle] = useState("");
   const [category, setCategory] = useState("");
 
-  const [locationInput, setLocationInput] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<{
-    locationName: string;
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-
+  const [location, setLocation] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [tags, setTags] = useState("");
-  const [deadline, setDeadline] = useState(
-    new Date(Date.now() + 2 * 60 * 60 * 1000)
-  );
+  
+  // FIXED: States are now arrays to handle multi-select pills
+  const [dietaryTags, setDietaryTags] = useState<string[]>([]);
+  const [allergenWarnings, setAllergenWarnings] = useState<string[]>([]);
+
+  const [deadline, setDeadline] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -56,10 +56,22 @@ export default function PostScreen() {
     });
   };
 
+  // Helper functions to toggle pill selection
+  const toggleDietaryTag = (tag: string) => {
+    setDietaryTags((prev) => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const toggleWarning = (warning: string) => {
+    setAllergenWarnings((prev) => 
+      prev.includes(warning) ? prev.filter(w => w !== warning) : [...prev, warning]
+    );
+  };
+
   const handlePickImage = async () => {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert(
@@ -70,7 +82,7 @@ export default function PostScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'], // Updated to fix deprecation warning
         allowsEditing: true,
         quality: 0.7,
         base64: true
@@ -94,7 +106,7 @@ export default function PostScreen() {
       if (aiData.contains_multiple_food_types) {
         Alert.alert(
           "Multiple Foods Detected 🛑",
-          "Please post only one type of food per listing."
+          "Please post only one type of food per listing to make claiming easier. If you have different items, please take separate photos and make multiple posts."
         );
         setImageUri("");
         setImageBase64("");
@@ -106,9 +118,20 @@ export default function PostScreen() {
       setCategory(aiData.category || "other");
 
       if (aiData.estimated_qty) setQuantity(String(aiData.estimated_qty));
-      if (aiData.suggested_tags?.length) {
-        setTags(aiData.suggested_tags.join(", "));
+      
+      // Auto-fill arrays from AI
+      if (aiData.dietary_tags && Array.isArray(aiData.dietary_tags)) {
+        setDietaryTags(aiData.dietary_tags);
+      } else {
+        setDietaryTags([]);
       }
+      
+      if (aiData.allergen_warnings && Array.isArray(aiData.allergen_warnings)) {
+        setAllergenWarnings(aiData.allergen_warnings);
+      } else {
+        setAllergenWarnings([]);
+      }
+
     } catch (error) {
       console.error("Image analysis failed:", error);
       Alert.alert("AI Error", "Failed to analyze the food image.");
@@ -137,16 +160,8 @@ export default function PostScreen() {
 
       if (geocode.length > 0) {
         const address = geocode[0];
-        const formattedAddress =
-          `${address.name || ""} ${address.street || ""}`.trim() ||
-          "Current Location";
-
-        setLocationInput(formattedAddress);
-        setSelectedLocation({
-          locationName: formattedAddress,
-          latitude: locationData.coords.latitude,
-          longitude: locationData.coords.longitude
-        });
+        const formattedAddress = `${address.name || ""} ${address.street || ""}`.trim();
+        setLocation(formattedAddress || "Unknown Location");
       }
     } catch (error) {
       console.error("Location error:", error);
@@ -165,11 +180,8 @@ export default function PostScreen() {
       return;
     }
 
-    if (!selectedLocation) {
-      Alert.alert(
-        "Missing location",
-        "Please search and tap a location suggestion."
-      );
+    if (!location.trim()) {
+      Alert.alert("Missing location", "Please enter a pickup location.");
       return;
     }
 
@@ -179,36 +191,45 @@ export default function PostScreen() {
       const finalData = {
         ...aiAnalysisResult,
         food_title: foodTitle,
-        category,
+        category: category,
         estimated_qty: quantity
       };
 
-      const listingId = await uploadFoodListing(finalData, selectedLocation, {
+      // Pass the arrays directly, no need to split strings anymore
+      await uploadFoodListing(finalData, location.trim(), {
         food_title: foodTitle,
-        category,
+        category: category,
         estimated_qty: quantity,
-        tags: tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
+        dietary_tags: dietaryTags,
+        allergen_warnings: allergenWarnings,
         pickup_deadline: deadline.toISOString()
       });
 
       Alert.alert(
         "Success",
-        `Food listing posted successfully.\nListing ID: ${listingId}`
+        "Food listing posted successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset states
+              setImageUri("");
+              setImageBase64("");
+              setAiAnalysisResult(null);
+              setFoodTitle("");
+              setCategory("");
+              setLocation("");
+              setQuantity("");
+              setDietaryTags([]);
+              setAllergenWarnings([]);
+              setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
+              
+              router.replace('/');
+            }
+          }
+        ]
       );
 
-      setImageUri("");
-      setImageBase64("");
-      setAiAnalysisResult(null);
-      setFoodTitle("");
-      setCategory("");
-      setLocationInput("");
-      setSelectedLocation(null);
-      setQuantity("");
-      setTags("");
-      setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -287,45 +308,68 @@ export default function PostScreen() {
           </Text>
         </Pressable>
       </View>
-
-      <LocationAutocomplete
-        value={locationInput}
-        onChangeText={(text) => {
-          setLocationInput(text);
-          setSelectedLocation(null); // clear previous selection if user edits text
-        }}
-        onSelectLocation={(location) => {
-          setSelectedLocation(location);
-        }}
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Engineering Building"
+        value={location}
+        onChangeText={setLocation}
       />
-
-      {selectedLocation && (
-        <View style={styles.selectedLocationBox}>
-          <Text style={styles.selectedLocationText}>
-            ✅ Selected: {selectedLocation.locationName}
-          </Text>
-          <Text style={styles.selectedLocationSubtext}>
-            {selectedLocation.latitude.toFixed(6)},{" "}
-            {selectedLocation.longitude.toFixed(6)}
-          </Text>
-        </View>
-      )}
 
       <Text style={styles.label}>Quantity</Text>
       <TextInput
         style={styles.input}
-        placeholder="Auto-filled from AI, but editable"
         value={quantity}
         onChangeText={setQuantity}
+        keyboardType="numeric"
       />
 
+      {/* NEW: Dietary Tags as clickable pills */}
       <Text style={styles.label}>Dietary Tags</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Auto-filled from AI, but editable"
-        value={tags}
-        onChangeText={setTags}
-      />
+      <View style={styles.tagsContainer}>
+        {DIETARY_OPTIONS.map((tag) => (
+          <Pressable
+            key={tag}
+            style={[
+              styles.tagPill,
+              dietaryTags.includes(tag) && styles.tagPillActive
+            ]}
+            onPress={() => toggleDietaryTag(tag)}
+          >
+            <Text
+              style={[
+                styles.tagText,
+                dietaryTags.includes(tag) && styles.tagTextActive
+              ]}
+            >
+              {tag}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* NEW: Allergen Warnings as clickable red pills */}
+      <Text style={[styles.label, { color: '#C62828', marginTop: 16 }]}>Allergen Warnings</Text>
+      <View style={styles.tagsContainer}>
+        {WARNING_OPTIONS.map((warn) => (
+          <Pressable
+            key={warn}
+            style={[
+              styles.warningPill,
+              allergenWarnings.includes(warn) && styles.warningPillActive
+            ]}
+            onPress={() => toggleWarning(warn)}
+          >
+            <Text
+              style={[
+                styles.warningText,
+                allergenWarnings.includes(warn) && styles.warningTextActive
+              ]}
+            >
+              {warn}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
       <Text style={styles.label}>Pickup Deadline</Text>
       <Pressable
@@ -409,22 +453,6 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 15
   },
-  selectedLocationBox: {
-    backgroundColor: "#E8F5E9",
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 10
-  },
-  selectedLocationText: {
-    color: "#1B5E20",
-    fontWeight: "700",
-    fontSize: 14
-  },
-  selectedLocationSubtext: {
-    color: "#2E7D32",
-    fontSize: 12,
-    marginTop: 4
-  },
   categoryRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -451,6 +479,58 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontWeight: "700"
   },
+  
+  // Tag Styles
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tagPill: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#DDE5DB",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  tagPillActive: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#2E7D32"
+  },
+  tagText: {
+    color: "#555",
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  tagTextActive: {
+    color: "#2E7D32",
+    fontWeight: "700"
+  },
+
+  // Warning Styles
+  warningPill: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#FFCDD2",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  warningPillActive: {
+    backgroundColor: "#C62828",
+    borderColor: "#C62828"
+  },
+  warningText: {
+    color: "#C62828",
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  warningTextActive: {
+    color: "#fff",
+    fontWeight: "700"
+  },
+
   photoButton: {
     backgroundColor: "#E8F5E9",
     paddingVertical: 14,
