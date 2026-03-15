@@ -53,7 +53,9 @@ export default function HomeScreen() {
           quantity: item.estimated_qty || 'Some',
           weight: item.estimated_weight_kg || 0.35,
           safety_risk: item.safety_risk || false,
-          location: item.location || 'Unknown Location',
+location: item.locationName || item.location || 'Unknown Location',
+latitude: item.latitude || null,
+longitude: item.longitude || null,
           pickup_deadline: item.pickup_deadline || null,
           // NEW: Splitting tags into dietary and allergens
           dietary_tags: item.dietary_tags || [],
@@ -251,13 +253,15 @@ export default function HomeScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/claim',
-                  params: {
-                    id: item.id,
-                    food_title: item.food_title,
-                    qty: String(item.quantity),
-                    location: item.location,
-                    safety_risk: String(item.safety_risk)
-                  },
+params: {
+  id: item.id,
+  food_title: item.food_title,
+  qty: String(item.quantity),
+  location: item.location,
+  latitude: item.latitude ? String(item.latitude) : "",
+  longitude: item.longitude ? String(item.longitude) : "",
+  safety_risk: String(item.safety_risk)
+},
                 })
               }
             >
