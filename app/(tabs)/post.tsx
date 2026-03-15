@@ -17,7 +17,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
 
-const CATEGORIES = ["meal", "snack", "dessert", "other"];
+const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
 
 export default function PostScreen() {
   const [imageUri, setImageUri] = useState("");

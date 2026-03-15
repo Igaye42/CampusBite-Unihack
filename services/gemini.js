@@ -12,7 +12,7 @@ export async function analyzeFoodImage(base64Image) {
     {
       "contains_multiple_food_types": "Boolean. True ONLY IF there are completely distinct types of food in the image (e.g., a pizza AND a salad, or a burger AND fries). False if it is just multiple pieces of the SAME food (e.g., 3 apples or 5 slices of pizza).",
       "food_title": "String. A specific, highly recognizable name for the main food (e.g., 'Pepperoni Pizza').",
-      "category": "String. Must be exactly one of: [meal, snack, dessert, drink, other].",
+      "category": "String. Must be exactly one of: [meal, snack, dessert, drink, groceries, other].",
       "estimated_qty": "Integer. Estimate the total quantity or servings.",
       "estimated_weight_kg": "Float. Estimate the total weight in kilograms.",
       "safety_risk": "Boolean. True ONLY IF this food contains raw meat, raw seafood, or is clearly unrefrigerated dairy.",
