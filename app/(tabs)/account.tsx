@@ -251,9 +251,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#fff',
     paddingVertical: 20,
-    marginTop: 12,
-    borderBottomWidth: 1,
-    borderTopWidth: 1,
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: '#E0E7E0',
   },
   statBox: {
@@ -293,9 +294,11 @@ const styles = StyleSheet.create({
   },
   preferencesCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E0E7E0',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -349,6 +352,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E0E7E0',
   },
   menuText: {
     flex: 1,

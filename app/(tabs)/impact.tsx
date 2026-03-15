@@ -84,7 +84,7 @@ export default function ImpactScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.number}>📍 {topLocation}</Text>
+        <Text style={styles.locationNumber}>{topLocation}</Text>
         <Text style={styles.label}>Top Location</Text>
       </View>
     </ScrollView>
@@ -111,13 +111,21 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 14,
     alignItems: "center",
-    elevation: 3
+    borderWidth: 1,
+    borderColor: "#E0E7E0",
   },
   number: {
     fontSize: 28,
+    fontWeight: "800",
+    color: "#2E7D32",
+    marginBottom: 6,
+    textAlign: "center"
+  },
+  locationNumber: {
+    fontSize: 20,
     fontWeight: "800",
     color: "#2E7D32",
     marginBottom: 6,
