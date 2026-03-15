@@ -30,6 +30,8 @@ export default function HomeScreen() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [matchDietary, setMatchDietary] = useState(true);
+  const { studentData } = useAuth();
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   // UI State for filtering
@@ -151,6 +153,38 @@ return {
         }
       }
 
+      // 4. Automatic Dietary Profile Matching
+      if (matchDietary && studentData?.preferences) {
+        const userDiets = studentData.preferences.dietary_tags || [];
+        const userAllergies = studentData.preferences.allergies || [];
+        const itemDiets = item.dietary_tags || [];
+        const itemWarnings = item.allergen_warnings || [];
+
+        // If user has any specific dietary requirements (e.g. Vegetarian), item must have at least one of them
+        if (userDiets.length > 0) {
+          const hasMatchingDiet = userDiets.some((diet: string) => itemDiets.includes(diet));
+          if (!hasMatchingDiet) return false;
+        }
+
+        // If user has allergies, block any item that has a warning for those allergens
+        if (userAllergies.length > 0) {
+          const hasAllergyConflict = userAllergies.some((allergy: string) => {
+            // Map common allergies to warning strings
+            const warningMap: Record<string, string[]> = {
+              'Nuts': ['Contains Nuts', 'Contains Peanuts'],
+              'Dairy': ['Contains Dairy'],
+              'Seafood': ['Contains Seafood'],
+              'Eggs': ['Contains Eggs'],
+              'Gluten': ['Contains Gluten'],
+              'Soy': ['Contains Soy']
+            };
+            const relevantWarnings = warningMap[allergy] || [`Contains ${allergy}`];
+            return relevantWarnings.some(w => itemWarnings.includes(w));
+          });
+          if (hasAllergyConflict) return false;
+        }
+      }
+
       return true;
     });
 
@@ -173,6 +207,20 @@ return {
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
+
+      <Pressable 
+        style={[styles.dietaryToggle, matchDietary && styles.dietaryToggleActive]}
+        onPress={() => setMatchDietary(!matchDietary)}
+      >
+        <Ionicons 
+          name={matchDietary ? "checkbox" : "square-outline"} 
+          size={20} 
+          color={matchDietary ? "#fff" : "#2E7D32"} 
+        />
+        <Text style={[styles.dietaryToggleText, matchDietary && styles.dietaryToggleTextActive]}>
+          Match my Dietary Profile
+        </Text>
+      </Pressable>
 
       {/* Dietary Filter Pills UI */}
       <View style={styles.filterContainer}>
@@ -327,14 +375,38 @@ return {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F9F4', paddingHorizontal: 16, paddingTop: 16 },
   heading: { fontSize: 26, fontWeight: '800', color: '#1B4332', marginBottom: 12 },
-  searchInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE5DB', borderRadius: 12, padding: 12, fontSize: 15, marginBottom: 12 },
+  searchInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E7E0', borderRadius: 12, padding: 12, fontSize: 15, marginBottom: 8 },
+  dietaryToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#2E7D32',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  dietaryToggleActive: {
+    backgroundColor: '#2E7D32',
+  },
+  dietaryToggleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  dietaryToggleTextActive: {
+    color: '#fff',
+  },
   filterContainer: { marginBottom: 16 },
   filterPill: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE5DB', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
   filterPillSelected: { backgroundColor: '#E8F5E9', borderColor: '#2E7D32' },
   filterPillText: { color: '#555', fontSize: 13, fontWeight: '600' },
   filterPillTextSelected: { color: '#2E7D32', fontWeight: '700' },
   listContent: { paddingBottom: 24 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 14, elevation: 3 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E0E7E0' },
   imageContainer: {
     width: '100%',
     height: 160,

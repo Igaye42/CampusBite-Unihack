@@ -402,8 +402,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
     padding: 16,
-    borderRadius: 16,
-    elevation: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E7E0",
     position: 'relative',
   },
   closeCardButton: {
@@ -515,7 +516,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
     backgroundColor: "#E8F5E9",
     padding: 16,
-    borderRadius: 12
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#C8E6C9",
   },
   successText: {
     fontSize: 16,
