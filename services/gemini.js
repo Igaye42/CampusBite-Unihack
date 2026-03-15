@@ -16,7 +16,8 @@ export async function analyzeFoodImage(base64Image) {
       "estimated_qty": "Integer. Estimate the total quantity or servings.",
       "estimated_weight_kg": "Float. Estimate the total weight in kilograms.",
       "safety_risk": "Boolean. True ONLY IF this food contains raw meat, raw seafood, or is clearly unrefrigerated dairy.",
-      "suggested_tags": "Array of strings. Select applicable from: [vegetarian, vegan, halal, gluten-free, dairy-free, nut-warning]"
+      "dietary_tags": "Array of strings. Select applicable from: ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'].",
+      "allergen_warnings": "Array of strings. Select ONLY IF visually obvious or highly likely. Options: ['Contains Peanuts', 'Contains Nuts', 'Contains Seafood', 'Contains Dairy', 'Contains Eggs']."
     }
     `;
 
