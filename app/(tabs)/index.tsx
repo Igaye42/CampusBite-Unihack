@@ -261,6 +261,7 @@ params: {
   food_title: item.food_title,
   qty: String(item.quantity),
   location: item.location,
+  locationDetails: item.locationDetails || "",
   latitude: item.latitude ? String(item.latitude) : "",
   longitude: item.longitude ? String(item.longitude) : "",
   safety_risk: String(item.safety_risk)

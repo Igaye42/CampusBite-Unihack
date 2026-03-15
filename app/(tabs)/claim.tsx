@@ -18,16 +18,25 @@ import {
 
 export default function ClaimScreen() {
   // FIXED: Added safety_risk to the destructured object and its type definition
-  const { id, food_title, qty, location, latitude, longitude, safety_risk } =
-    useLocalSearchParams<{
-      id?: string;
-      food_title?: string;
-      qty?: string;
-      location?: string;
-      latitude?: string;
-      longitude?: string;
-      safety_risk?: string; 
-    }>();
+const {
+  id,
+  food_title,
+  qty,
+  location,
+  locationDetails,
+  latitude,
+  longitude,
+  safety_risk
+} = useLocalSearchParams<{
+  id?: string;
+  food_title?: string;
+  qty?: string;
+  location?: string;
+  locationDetails?: string;
+  latitude?: string;
+  longitude?: string;
+  safety_risk?: string;
+}>();
 
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
@@ -134,7 +143,10 @@ export default function ClaimScreen() {
           <Text style={styles.detail}>
             📦 {qty ? `${qty} items` : "Unknown quantity"}
           </Text>
-          <Text style={styles.detail}>📍 {location || "Unknown Location"}</Text>
+<Text style={styles.detail}>📍 {location || "Unknown Location"}</Text>
+{locationDetails ? (
+  <Text style={styles.detail}>🏢 {locationDetails}</Text>
+) : null}
 
           <Pressable
             style={{ marginBottom: 16, marginTop: 4 }}
