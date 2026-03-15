@@ -26,46 +26,52 @@ export default function HomeScreen() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   // UI State for filtering
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToAvailableListings((data: any[]) => {
-      const formattedListings = data.map((item: any) => {
-        let minutesLeft = 0;
-        let pickupByTime = 'N/A';
+useEffect(() => {
+  const unsubscribe = subscribeToAvailableListings((data: any[]) => {
+    const formattedListings = data.map((item: any) => {
+      let pickupByTime = 'N/A';
 
-        if (item.pickup_deadline) {
-          const deadline = new Date(item.pickup_deadline);
-          const now = new Date();
-          const diffMs = deadline.getTime() - now.getTime();
-          minutesLeft = Math.max(0, Math.floor(diffMs / (1000 * 60)));
-          pickupByTime = deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
+      if (item.pickup_deadline) {
+        const deadline = new Date(item.pickup_deadline);
+        pickupByTime = deadline.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
 
-        return {
-          id: item.id,
-          food_title: item.food_title || 'Food Item',
-          category: item.category || 'other',
-          quantity: item.estimated_qty || 'Some',
-          weight: item.estimated_weight_kg || 0.35,
-          safety_risk: item.safety_risk || false,
-          location: item.location || 'Unknown Location',
-          minutesLeft: minutesLeft,
-          tags: item.tags || [],
-          pickupBy: pickupByTime,
-        };
-      });
-
-      setListings(formattedListings);
-      setLoading(false);
+      return {
+        id: item.id,
+        food_title: item.food_title || 'Food Item',
+        category: item.category || 'other',
+        quantity: item.estimated_qty || 'Some',
+        weight: item.estimated_weight_kg || 0.35,
+        safety_risk: item.safety_risk || false,
+        location: item.location || 'Unknown Location',
+        pickup_deadline: item.pickup_deadline || null,
+        tags: item.tags || [],
+        pickupBy: pickupByTime,
+      };
     });
 
-    return () => unsubscribe();
-  }, []);
+    setListings(formattedListings);
+    setLoading(false);
+  });
 
+  return () => unsubscribe();
+}, []);
+useEffect(() => {
+  const interval = setInterval(() => {
+    setCurrentTime(Date.now());
+  }, 60000); // update every minute
+
+  return () => clearInterval(interval);
+}, []);
   const onRefresh = async () => {
     setRefreshing(true);
     try {
@@ -78,11 +84,26 @@ export default function HomeScreen() {
   };
 
   // Frontend fallback filtering: Remove expired items, apply search text, apply tag filter
-  const processedListings = listings.filter((item) => {
-    // 1. Expiry filter (Frontend fallback)
+const processedListings = listings
+  .map((item) => {
+    let minutesLeft = 0;
+
+    if (item.pickup_deadline) {
+      const deadlineMs = new Date(item.pickup_deadline).getTime();
+      const diffMs = deadlineMs - currentTime;
+      minutesLeft = Math.max(0, Math.floor(diffMs / (1000 * 60)));
+    }
+
+    return {
+      ...item,
+      minutesLeft,
+    };
+  })
+  .filter((item) => {
+    // 1. Expiry filter
     if (item.minutesLeft <= 0) return false;
 
-    // 2. Search query filter (matches title or location)
+    // 2. Search query filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchTitle = item.food_title.toLowerCase().includes(query);
@@ -92,7 +113,6 @@ export default function HomeScreen() {
 
     // 3. Dietary tag filter
     if (selectedTag) {
-      // Handles case where tags array might be undefined or empty
       if (!item.tags || !item.tags.includes(selectedTag)) return false;
     }
 
