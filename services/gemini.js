@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyDHmBt47Y2yJbBzLSOcyFkLt-qRT9rc4zA"
+  apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY
 });
 
 export async function analyzeFoodImage(base64Image) {

@@ -21,7 +21,11 @@ Follow these steps to run the application on your physical device:
    ```bash
    npm install
    ```
-3. **Launch Server**: Start the development server:
+3. **Environment Configuration**: Create a `.env` file in the root directory and add the Gemini API key ([Get a free key](https://aistudio.google.com/app/apikey)) to enable AI image analysis:
+   ```env
+   EXPO_PUBLIC_GEMINI_API_KEY=your_api_key_here
+   ```
+4. **Launch Server**: Start the development server:
    ```bash
    npx expo start
    ```
