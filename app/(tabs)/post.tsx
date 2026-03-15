@@ -12,6 +12,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
@@ -28,13 +29,23 @@ export default function PostScreen() {
   const [location, setLocation] = useState("");
   const [quantity, setQuantity] = useState("");
   const [tags, setTags] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const [deadline, setDeadline] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
+const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
 
+    const formatDeadlineDisplay = (date: Date) => {
+    return date.toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
   const handlePickImage = async () => {
     try {
       const permission =
@@ -165,7 +176,7 @@ export default function PostScreen() {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean),
-  pickup_deadline: deadline
+  pickup_deadline: deadline.toISOString()
 });
 
       Alert.alert(
@@ -182,7 +193,7 @@ export default function PostScreen() {
       setLocation("");
       setQuantity("");
       setTags("");
-      setDeadline("");
+setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -284,13 +295,30 @@ export default function PostScreen() {
         onChangeText={setTags}
       />
 
-      <Text style={styles.label}>Pickup Deadline</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 5:00 PM today"
-        value={deadline}
-        onChangeText={setDeadline}
-      />
+<Text style={styles.label}>Pickup Deadline</Text>
+<Pressable
+  style={styles.input}
+  onPress={() => setShowDeadlinePicker(true)}
+>
+  <Text style={{ fontSize: 15, color: "#222" }}>
+    {formatDeadlineDisplay(deadline)}
+  </Text>
+</Pressable>
+
+{showDeadlinePicker && (
+  <DateTimePicker
+    value={deadline}
+    mode="datetime"
+    display="default"
+    minimumDate={new Date()}
+    onChange={(event, selectedDate) => {
+      setShowDeadlinePicker(false);
+      if (selectedDate) {
+        setDeadline(selectedDate);
+      }
+    }}
+  />
+)}
 
       <Pressable
         style={[styles.postButton, isPosting && styles.postButtonDisabled]}
