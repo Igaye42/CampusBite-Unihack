@@ -17,12 +17,14 @@ import {
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
-  const { id, food_title, qty, location, safety_risk } = useLocalSearchParams<{
+const { id, food_title, qty, location, latitude, longitude } =
+  useLocalSearchParams<{
     id?: string;
     food_title?: string;
     qty?: string;
     location?: string;
-    safety_risk?: string;
+    latitude?: string;
+    longitude?: string;
   }>();
 
   const [claiming, setClaiming] = useState(false);
@@ -82,7 +84,21 @@ export default function ClaimScreen() {
     }
   };
 
-  const openMapsForNavigation = (destination: string) => {
+const openMapsForNavigation = (
+  destination: string,
+  lat?: string,
+  lng?: string
+) => {
+  const hasCoords = lat && lng;
+
+  let url: string | undefined;
+
+  if (hasCoords) {
+    url = Platform.select({
+      ios: `maps:0,0?q=${lat},${lng}`,
+      android: `geo:${lat},${lng}?q=${lat},${lng}`
+    });
+  } else {
     if (!destination || destination === "Unknown Location") {
       Alert.alert(
         "Invalid Location",
@@ -93,17 +109,18 @@ export default function ClaimScreen() {
 
     const encodedQuery = encodeURIComponent(destination);
 
-    const url = Platform.select({
+    url = Platform.select({
       ios: `maps:0,0?q=${encodedQuery}`,
       android: `geo:0,0?q=${encodedQuery}`
     });
+  }
 
-    if (url) {
-      Linking.openURL(url).catch(() => {
-        Alert.alert("Error", "Could not open map application.");
-      });
-    }
-  };
+  if (url) {
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Error", "Could not open map application.");
+    });
+  }
+};
 
   return (
     <View style={styles.container}>
@@ -119,7 +136,7 @@ export default function ClaimScreen() {
 
           <Pressable
             style={{ marginBottom: 16, marginTop: 4 }}
-            onPress={() => openMapsForNavigation(location || "")}
+onPress={() => openMapsForNavigation(location || "", latitude, longitude)}
           >
             <Text style={{ color: "#0277BD", fontWeight: "700", fontSize: 15 }}>
               🧭 Get Directions

@@ -38,13 +38,9 @@ export const db = getFirestore(app);
  */
 export async function uploadFoodListing(aiData, locationData, manualData = {}) {
   try {
-    // Process Dietary Tags
-    const manualDietary = Array.isArray(manualData.dietary_tags) ? manualData.dietary_tags : [];
-    const finalDietary = manualDietary.length > 0 ? manualDietary : (aiData.dietary_tags || []);
-
-    // Process Allergen Warnings
-    const manualAllergens = Array.isArray(manualData.allergen_warnings) ? manualData.allergen_warnings : [];
-    const finalAllergens = manualAllergens.length > 0 ? manualAllergens : (aiData.allergen_warnings || []);
+    const manualTags = Array.isArray(manualData.tags) ? manualData.tags : [];
+    const finalTags =
+      manualTags.length > 0 ? manualTags : aiData.suggested_tags || [];
 
     const finalDeadline =
       manualData.pickup_deadline &&
@@ -52,19 +48,26 @@ export async function uploadFoodListing(aiData, locationData, manualData = {}) {
         ? new Date(manualData.pickup_deadline).toISOString()
         : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-    const listing = {
-      food_title: manualData.food_title || aiData.food_title,
-      category: manualData.category || aiData.category,
-      estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
-      estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
-      safety_risk: aiData.safety_risk || false,
-      dietary_tags: finalDietary,
-      allergen_warnings: finalAllergens,
-      location: locationData,
-      pickup_deadline: finalDeadline,
-      status: "available",
-      createdAt: serverTimestamp()
-    };
+const listing = {
+  food_title: manualData.food_title || aiData.food_title,
+  category: manualData.category || aiData.category,
+  estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
+  estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
+  safety_risk: aiData.safety_risk,
+
+  tags: finalTags,
+  dietary_tags: aiData.dietary_tags || finalTags || [],
+  allergen_warnings: aiData.allergen_warnings || [],
+
+  location: locationData.locationName,
+  locationName: locationData.locationName,
+  latitude: locationData.latitude,
+  longitude: locationData.longitude,
+
+  pickup_deadline: finalDeadline,
+  status: "available",
+  createdAt: serverTimestamp()
+};
 
     const docRef = await addDoc(collection(db, "listings"), listing);
     console.log("Listing successfully created with ID: ", docRef.id);
@@ -74,7 +77,6 @@ export async function uploadFoodListing(aiData, locationData, manualData = {}) {
     throw e;
   }
 }
-
 /**
  * Retrieves all food listings with an 'available' status.
  * @returns {Promise<Array>} Array of available listing objects.
@@ -217,7 +219,7 @@ export function subscribeToTopLocation(callback) {
       const locationCounts = {};
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        const loc = data.location;
+const loc = data.locationName || data.location;
         if (loc) {
           locationCounts[loc] = (locationCounts[loc] || 0) + 1;
         }

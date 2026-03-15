@@ -1,7 +1,5 @@
-import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -14,9 +12,11 @@ import {
   TextInput,
   View
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
+import LocationAutocomplete from "../../components/LocationAutocomplete";
 
 const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
 
@@ -27,14 +27,18 @@ export default function PostScreen() {
   const [foodTitle, setFoodTitle] = useState("");
   const [category, setCategory] = useState("");
 
-  const [location, setLocation] = useState("");
-  const [quantity, setQuantity] = useState("");
-  
-  // NEW: Separated tags states
-  const [dietaryTags, setDietaryTags] = useState("");
-  const [allergenWarnings, setAllergenWarnings] = useState("");
+  const [locationInput, setLocationInput] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<{
+    locationName: string;
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
-  const [deadline, setDeadline] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000));
+  const [quantity, setQuantity] = useState("");
+  const [tags, setTags] = useState("");
+  const [deadline, setDeadline] = useState(
+    new Date(Date.now() + 2 * 60 * 60 * 1000)
+  );
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -54,7 +58,8 @@ export default function PostScreen() {
 
   const handlePickImage = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
         Alert.alert(
@@ -89,7 +94,7 @@ export default function PostScreen() {
       if (aiData.contains_multiple_food_types) {
         Alert.alert(
           "Multiple Foods Detected 🛑",
-          "Please post only one type of food per listing to make claiming easier. If you have different items (e.g., pizza AND salad), please take separate photos and make multiple posts."
+          "Please post only one type of food per listing."
         );
         setImageUri("");
         setImageBase64("");
@@ -97,20 +102,13 @@ export default function PostScreen() {
       }
 
       setAiAnalysisResult(aiData);
-
       setFoodTitle(aiData.food_title || "Unknown Food");
       setCategory(aiData.category || "other");
 
       if (aiData.estimated_qty) setQuantity(String(aiData.estimated_qty));
-      
-      // NEW: Apply separated tags from AI
-      if (aiData.dietary_tags?.length) {
-        setDietaryTags(aiData.dietary_tags.join(", "));
+      if (aiData.suggested_tags?.length) {
+        setTags(aiData.suggested_tags.join(", "));
       }
-      if (aiData.allergen_warnings?.length) {
-        setAllergenWarnings(aiData.allergen_warnings.join(", "));
-      }
-
     } catch (error) {
       console.error("Image analysis failed:", error);
       Alert.alert("AI Error", "Failed to analyze the food image.");
@@ -139,8 +137,16 @@ export default function PostScreen() {
 
       if (geocode.length > 0) {
         const address = geocode[0];
-        const formattedAddress = `${address.name || ""} ${address.street || ""}`.trim();
-        setLocation(formattedAddress || "Unknown Location");
+        const formattedAddress =
+          `${address.name || ""} ${address.street || ""}`.trim() ||
+          "Current Location";
+
+        setLocationInput(formattedAddress);
+        setSelectedLocation({
+          locationName: formattedAddress,
+          latitude: locationData.coords.latitude,
+          longitude: locationData.coords.longitude
+        });
       }
     } catch (error) {
       console.error("Location error:", error);
@@ -159,8 +165,11 @@ export default function PostScreen() {
       return;
     }
 
-    if (!location.trim()) {
-      Alert.alert("Missing location", "Please enter a pickup location.");
+    if (!selectedLocation) {
+      Alert.alert(
+        "Missing location",
+        "Please search and tap a location suggestion."
+      );
       return;
     }
 
@@ -170,46 +179,36 @@ export default function PostScreen() {
       const finalData = {
         ...aiAnalysisResult,
         food_title: foodTitle,
-        category: category,
+        category,
         estimated_qty: quantity
       };
 
-      // Ensure manual data correctly overrides AI data and uses new schema
-      await uploadFoodListing(finalData, location.trim(), {
+      const listingId = await uploadFoodListing(finalData, selectedLocation, {
         food_title: foodTitle,
-        category: category,
+        category,
         estimated_qty: quantity,
-        dietary_tags: dietaryTags.split(",").map((tag) => tag.trim()).filter(Boolean),
-        allergen_warnings: allergenWarnings.split(",").map((warn) => warn.trim()).filter(Boolean),
+        tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
         pickup_deadline: deadline.toISOString()
       });
 
       Alert.alert(
         "Success",
-        "Food listing posted successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Reset states
-              setImageUri("");
-              setImageBase64("");
-              setAiAnalysisResult(null);
-              setFoodTitle("");
-              setCategory("");
-              setLocation("");
-              setQuantity("");
-              setDietaryTags("");
-              setAllergenWarnings("");
-              setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
-              
-              // NEW: Jump back to home screen
-              router.replace('/');
-            }
-          }
-        ]
+        `Food listing posted successfully.\nListing ID: ${listingId}`
       );
 
+      setImageUri("");
+      setImageBase64("");
+      setAiAnalysisResult(null);
+      setFoodTitle("");
+      setCategory("");
+      setLocationInput("");
+      setSelectedLocation(null);
+      setQuantity("");
+      setTags("");
+      setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
     } catch (error) {
       console.error("Post failed:", error);
       Alert.alert(
@@ -288,12 +287,29 @@ export default function PostScreen() {
           </Text>
         </Pressable>
       </View>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Engineering Building"
-        value={location}
-        onChangeText={setLocation}
+
+      <LocationAutocomplete
+        value={locationInput}
+        onChangeText={(text) => {
+          setLocationInput(text);
+          setSelectedLocation(null); // clear previous selection if user edits text
+        }}
+        onSelectLocation={(location) => {
+          setSelectedLocation(location);
+        }}
       />
+
+      {selectedLocation && (
+        <View style={styles.selectedLocationBox}>
+          <Text style={styles.selectedLocationText}>
+            ✅ Selected: {selectedLocation.locationName}
+          </Text>
+          <Text style={styles.selectedLocationSubtext}>
+            {selectedLocation.latitude.toFixed(6)},{" "}
+            {selectedLocation.longitude.toFixed(6)}
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.label}>Quantity</Text>
       <TextInput
@@ -306,17 +322,9 @@ export default function PostScreen() {
       <Text style={styles.label}>Dietary Tags</Text>
       <TextInput
         style={styles.input}
-        placeholder="e.g., Vegetarian, Halal"
-        value={dietaryTags}
-        onChangeText={setDietaryTags}
-      />
-
-      <Text style={[styles.label, { color: '#C62828' }]}>Allergen Warnings</Text>
-      <TextInput
-        style={[styles.input, { borderColor: '#FFCDD2', backgroundColor: '#FFEBEE' }]}
-        placeholder="e.g., Contains Nuts, Contains Dairy"
-        value={allergenWarnings}
-        onChangeText={setAllergenWarnings}
+        placeholder="Auto-filled from AI, but editable"
+        value={tags}
+        onChangeText={setTags}
       />
 
       <Text style={styles.label}>Pickup Deadline</Text>
@@ -400,6 +408,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     fontSize: 15
+  },
+  selectedLocationBox: {
+    backgroundColor: "#E8F5E9",
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 10
+  },
+  selectedLocationText: {
+    color: "#1B5E20",
+    fontWeight: "700",
+    fontSize: 14
+  },
+  selectedLocationSubtext: {
+    color: "#2E7D32",
+    fontSize: 12,
+    marginTop: 4
   },
   categoryRow: {
     flexDirection: "row",
