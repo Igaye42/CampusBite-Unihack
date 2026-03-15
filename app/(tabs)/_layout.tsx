@@ -16,6 +16,7 @@ export default function TabLayout() {
           else if (route.name === 'post') iconName = 'add-circle';
           else if (route.name === 'claim') iconName = 'checkmark-circle';
           else if (route.name === 'impact') iconName = 'leaf';
+          else if (route.name === 'account') iconName = 'person';
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -25,6 +26,7 @@ export default function TabLayout() {
       <Tabs.Screen name="post" options={{ title: 'Post' }} />
       <Tabs.Screen name="claim" options={{ title: 'Claim' }} />
       <Tabs.Screen name="impact" options={{ title: 'Impact' }} />
+      <Tabs.Screen name="account" options={{ title: 'Account' }} />
     </Tabs>
   );
 }

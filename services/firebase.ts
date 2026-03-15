@@ -14,6 +14,18 @@ import {
   updateDoc,
   where
 } from "firebase/firestore";
+import {
+  getAuth, 
+  initializeAuth,
+  // @ts-ignore
+  getReactNativePersistence,
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut,
+  onAuthStateChanged,
+  updateEmail
+} from "firebase/auth";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -29,6 +41,125 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
+// Initialize Firebase Auth with React Native persistence to prevent warnings/errors
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
+
+/**
+ * Registers a new student and initializes their profile with preferences.
+ */
+export async function registerStudent(email: string, password: string, profileData: any) {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Initialize user profile in 'students' collection
+    await setDoc(doc(db, "students", user.uid), {
+      uid: user.uid,
+      email: user.email,
+      firstName: profileData.firstName || "",
+      lastName: profileData.lastName || "",
+      displayName: `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || "Student",
+      preferencesSet: false,
+      credits: 0,
+      claims: 0,
+      createdAt: serverTimestamp()
+    });
+
+    return user;
+  } catch (error) {
+    console.error("Registration error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Logs in a student.
+ */
+export async function loginStudent(email: string, password: string) {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+  } catch (error) {
+    console.error("Login error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Logs out the current user.
+ */
+export async function logoutStudent() {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Logout error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Updates student preferences and triggers preferencesSet
+ */
+export async function updateStudentPreferences(userId: string, preferencesData: any) {
+  try {
+    const studentRef = doc(db, "students", userId);
+    await updateDoc(studentRef, { 
+      preferences: {
+        dietary_tags: preferencesData.dietaryTags || [],
+        allergies: preferencesData.allergies || [],
+        favorite_categories: preferencesData.categories || []
+      },
+      preferencesSet: true
+    });
+  } catch (error) {
+    console.error("Error updating preferences:", error);
+    throw error;
+  }
+}
+
+/**
+ * Updates a student's profile picture URL
+ */
+export async function updateStudentAvatar(userId: string, avatarUrl: string) {
+  try {
+    const studentRef = doc(db, "students", userId);
+    await updateDoc(studentRef, { avatarUrl });
+  } catch (error) {
+    console.error("Error updating avatar:", error);
+    throw error;
+  }
+}
+
+/**
+ * Updates a student's profile details including authentication email.
+ */
+export async function updateStudentProfile(userId: string, currentEmail: string, newEmail: string, firstName: string, lastName: string) {
+  try {
+    const studentRef = doc(db, "students", userId);
+    
+    // Update display name and names in firestore
+    const payload: any = {
+      firstName,
+      lastName,
+      displayName: `${firstName} ${lastName}`.trim() || "Student"
+    };
+
+    // Only attempt to change auth email if different
+    if (newEmail !== currentEmail) {
+      if (!auth.currentUser) throw new Error("No authenticated user");
+      await updateEmail(auth.currentUser, newEmail);
+      payload.email = newEmail;
+    }
+
+    await updateDoc(studentRef, payload);
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    throw error;
+  }
+}
+
 /**
  * Merges AI-extracted data with user manual input and saves it to the database.
  * @param {Object} aiData - The JSON output from the Gemini API.
@@ -40,7 +171,7 @@ export async function uploadFoodListing(aiData: any, locationData: any, manualDa
   try {
     const finalDeadline =
       manualData.pickup_deadline &&
-      !isNaN(new Date(manualData.pickup_deadline).getTime())
+        !isNaN(new Date(manualData.pickup_deadline).getTime())
         ? new Date(manualData.pickup_deadline).toISOString()
         : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
@@ -88,7 +219,7 @@ export async function getAvailableListings() {
 
     const now = new Date();
 
-    const listings = [];
+    const listings: any[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
 
@@ -122,7 +253,7 @@ export async function getAvailableListings() {
  * @param {Function} callback - A callback function that receives the updated array of listings.
  * @returns {Function} An unsubscribe function to detach the listener.
  */
-export function subscribeToAvailableListings(callback) {
+export function subscribeToAvailableListings(callback: any) {
   const q = query(
     collection(db, "listings"),
     where("status", "==", "available")
@@ -133,7 +264,7 @@ export function subscribeToAvailableListings(callback) {
     (querySnapshot) => {
       const now = new Date();
 
-      const listings = [];
+      const listings: any[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
 
@@ -172,13 +303,13 @@ export function subscribeToAvailableListings(callback) {
  * @param {Function} callback - A callback function that receives the updated array of claimed listings.
  * @returns {Function} An unsubscribe function to detach the listener.
  */
-export function subscribeToClaimedListings(callback) {
+export function subscribeToClaimedListings(callback: any) {
   const q = query(collection(db, "listings"), where("status", "==", "claimed"));
 
   const unsubscribe = onSnapshot(
     q,
     (querySnapshot) => {
-      const listings = [];
+      const listings: any[] = [];
       querySnapshot.forEach((doc) => {
         listings.push({ id: doc.id, ...doc.data() });
       });
@@ -206,16 +337,16 @@ export function subscribeToClaimedListings(callback) {
  * @param {Function} callback - A callback function that receives the top location string.
  * @returns {Function} An unsubscribe function to detach the listener.
  */
-export function subscribeToTopLocation(callback) {
+export function subscribeToTopLocation(callback: any) {
   const q = query(collection(db, "listings"), where("status", "==", "claimed"));
 
   const unsubscribe = onSnapshot(
     q,
     (querySnapshot) => {
-      const locationCounts = {};
+      const locationCounts: Record<string, number> = {};
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-const loc = data.locationName || data.location;
+        const loc = data.locationName || data.location;
         if (loc) {
           locationCounts[loc] = (locationCounts[loc] || 0) + 1;
         }
@@ -225,8 +356,9 @@ const loc = data.locationName || data.location;
       let maxCount = 0;
 
       for (const [loc, count] of Object.entries(locationCounts)) {
-        if (count > maxCount) {
-          maxCount = count;
+        const numericCount = count as number;
+        if (numericCount > maxCount) {
+          maxCount = numericCount;
           topLoc = loc;
         }
       }
@@ -247,7 +379,7 @@ const loc = data.locationName || data.location;
  * @param {String} listingId - The document ID of the listing to claim.
  * @returns {Promise<String>} The generated 4-character claim code.
  */
-export async function claimListing(listingId) {
+export async function claimListing(listingId: string) {
   try {
     const claimCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     const listingRef = doc(db, "listings", listingId);
@@ -318,7 +450,7 @@ export async function getImpactStats() {
  * @param {Function} callback - A callback function that receives the updated metrics.
  * @returns {Function} An unsubscribe function to detach the listener.
  */
-export function subscribeToImpactStats(callback) {
+export function subscribeToImpactStats(callback: any) {
   const metricsRef = doc(db, "metrics", "campus_totals");
 
   const unsubscribe = onSnapshot(

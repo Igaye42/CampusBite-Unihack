@@ -265,6 +265,7 @@ export default function PostScreen() {
         value={foodTitle}
         onChangeText={setFoodTitle}
         placeholder="e.g. Cheese Pizza"
+        placeholderTextColor="#6B7280"
       />
 
       <Text style={styles.label}>Category</Text>
@@ -319,6 +320,7 @@ export default function PostScreen() {
         value={locationDetails}
         onChangeText={setLocationDetails}
         placeholder="e.g. Level 2, Room 214"
+        placeholderTextColor="#6B7280"
       />
 
       <Text style={styles.label}>Quantity</Text>
@@ -327,6 +329,8 @@ export default function PostScreen() {
         value={quantity}
         onChangeText={setQuantity}
         keyboardType="numeric"
+        placeholder="e.g. 5"
+        placeholderTextColor="#6B7280"
       />
 
       <Text style={styles.label}>Dietary Tags</Text>

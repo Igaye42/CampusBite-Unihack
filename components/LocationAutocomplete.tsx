@@ -165,6 +165,7 @@ export default function LocationAutocomplete({
       <TextInput
         style={styles.input}
         placeholder={placeholder}
+        placeholderTextColor="#6B7280"
         value={value}
         onChangeText={(text) => {
           onChangeText(text);
