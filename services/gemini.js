@@ -23,7 +23,7 @@ export async function analyzeFoodImage(base64Image) {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: [
         prompt,
         { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
