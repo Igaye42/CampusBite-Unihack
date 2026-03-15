@@ -42,6 +42,12 @@ export async function uploadFoodListing(aiData, locationData, manualData = {}) {
     const finalTags =
       manualTags.length > 0 ? manualTags : aiData.suggested_tags || [];
 
+    const finalDeadline =
+      manualData.pickup_deadline &&
+      !isNaN(new Date(manualData.pickup_deadline).getTime())
+        ? new Date(manualData.pickup_deadline).toISOString()
+        : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
     const listing = {
       food_title: manualData.food_title || aiData.food_title,
       category: manualData.category || aiData.category,
@@ -50,9 +56,7 @@ export async function uploadFoodListing(aiData, locationData, manualData = {}) {
       safety_risk: aiData.safety_risk,
       tags: finalTags,
       location: locationData,
-      pickup_deadline:
-        manualData.pickup_deadline ||
-        new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      pickup_deadline: finalDeadline,
       status: "available",
       createdAt: serverTimestamp()
     };
@@ -76,14 +80,33 @@ export async function getAvailableListings() {
       collection(db, "listings"),
       where("status", "==", "available")
     );
+
     const querySnapshot = await getDocs(q);
+
+    const now = new Date();
 
     const listings = [];
     querySnapshot.forEach((doc) => {
-      listings.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+
+      const deadline = data.pickup_deadline
+        ? new Date(data.pickup_deadline)
+        : null;
+
+      const isNotExpired = deadline ? deadline.getTime() > now.getTime() : true;
+
+      if (isNotExpired) {
+        listings.push({ id: doc.id, ...data });
+      }
     });
 
-    console.log(`Successfully fetched ${listings.length} available listings.`);
+    listings.sort((a, b) => {
+      const aTime = a.pickup_deadline ? new Date(a.pickup_deadline).getTime() : Infinity;
+      const bTime = b.pickup_deadline ? new Date(b.pickup_deadline).getTime() : Infinity;
+      return aTime - bTime;
+    });
+
+    console.log(`Successfully fetched ${listings.length} available non-expired listings.`);
     return listings;
   } catch (e) {
     console.error("Error fetching listings: ", e);
@@ -105,11 +128,32 @@ export function subscribeToAvailableListings(callback) {
   const unsubscribe = onSnapshot(
     q,
     (querySnapshot) => {
+      const now = new Date();
+
       const listings = [];
       querySnapshot.forEach((doc) => {
-        listings.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+
+        const deadline = data.pickup_deadline
+          ? new Date(data.pickup_deadline)
+          : null;
+
+        const isNotExpired = deadline ? deadline.getTime() > now.getTime() : true;
+
+        if (isNotExpired) {
+          listings.push({ id: doc.id, ...data });
+        }
       });
-      console.log(`Real-time update: ${listings.length} available listings.`);
+
+      listings.sort((a, b) => {
+        const aTime = a.pickup_deadline ? new Date(a.pickup_deadline).getTime() : Infinity;
+        const bTime = b.pickup_deadline ? new Date(b.pickup_deadline).getTime() : Infinity;
+        return aTime - bTime;
+      });
+
+      console.log(
+        `Real-time update: ${listings.length} available non-expired listings.`
+      );
       callback(listings);
     },
     (error) => {
