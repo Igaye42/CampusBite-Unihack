@@ -42,6 +42,7 @@ const {
   const [claimed, setClaimed] = useState(false);
   const [pickupCode, setPickupCode] = useState("");
   const [recentClaims, setRecentClaims] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
 
   // Parse string back to boolean since router params are always strings
   const isHighRisk = safety_risk === 'true';
@@ -187,48 +188,56 @@ const {
         </View>
       )}
 
-      <Text style={[styles.heading, { marginTop: id ? 24 : 0, fontSize: 20 }]}>
-        Recently Claimed Feed
-      </Text>
+      <Pressable 
+        style={styles.historyHeader} 
+        onPress={() => setShowHistory(!showHistory)}
+      >
+        <Text style={[styles.heading, { marginTop: 0, marginBottom: 0, fontSize: 20 }]}>
+          Recently Claimed Feed
+        </Text>
+        <Text style={styles.arrowIcon}>{showHistory ? '▼' : '▶'}</Text>
+      </Pressable>
 
-      <FlatList
-        data={recentClaims}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.historyCard}>
-            <View style={styles.historyTopRow}>
-              <Text style={styles.historyTitle}>
-                {item.food_title || item.category || "Food"}
-              </Text>
-              <View style={styles.claimedBadge}>
-                <Text style={styles.claimedText}>Claimed</Text>
+      {showHistory && (
+        <FlatList
+          data={recentClaims}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.historyCard}>
+              <View style={styles.historyTopRow}>
+                <Text style={styles.historyTitle}>
+                  {item.food_title || item.category || "Food"}
+                </Text>
+                <View style={styles.claimedBadge}>
+                  <Text style={styles.claimedText}>Claimed</Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.historyDetail}>
-              📍 {item.location || "Unknown Location"}
-            </Text>
-            {item.claimedAt && (
-              <Text style={styles.historyTime}>
-                Claimed at{" "}
-                {new Date(item.claimedAt.toMillis()).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit"
-                })}
+              <Text style={styles.historyDetail}>
+                📍 {item.location || "Unknown Location"}
               </Text>
-            )}
-          </View>
-        )}
-        contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.historyEmoji}>🙌</Text>
-            <Text style={styles.emptyText}>No recent claims.</Text>
-            <Text style={styles.emptySubtext}>
-              Be the first to claim food and reduce waste!
-            </Text>
-          </View>
-        }
-      />
+              {item.claimedAt && (
+                <Text style={styles.historyTime}>
+                  Claimed at{" "}
+                  {new Date(item.claimedAt.toMillis()).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                </Text>
+              )}
+            </View>
+          )}
+          contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.historyEmoji}>🙌</Text>
+              <Text style={styles.emptyText}>No recent claims.</Text>
+              <Text style={styles.emptySubtext}>
+                Be the first to claim food and reduce waste!
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -244,6 +253,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1B4332",
     marginBottom: 16
+  },
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 16,
+    backgroundColor: "#E8F5E9",
+    padding: 12,
+    borderRadius: 12,
+  },
+  arrowIcon: {
+    fontSize: 18,
+    color: "#2E7D32",
+    fontWeight: "bold",
   },
   card: {
     backgroundColor: "#fff",
