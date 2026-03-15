@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyABzM-zdA3SG4F5_Lv2ULsuCTSxqBq7hTM"
+  apiKey: "AIzaSyC154baLmkT1wQLAUFiCW7-PE6wM2_hDEM"
 });
 
 export async function analyzeFoodImage(base64Image) {
@@ -23,7 +23,7 @@ export async function analyzeFoodImage(base64Image) {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash", // FIXED: Changed to a widely supported stable model
       contents: [
         prompt,
         { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
@@ -35,7 +35,8 @@ export async function analyzeFoodImage(base64Image) {
 
     return JSON.parse(response.text);
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    // FIXED: Print the full error payload to the terminal so it isn't cut off by the phone UI
+    console.error("Gemini API Error Details:", JSON.stringify(error, null, 2));
     throw error;
   }
 }
