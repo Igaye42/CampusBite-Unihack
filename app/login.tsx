@@ -5,12 +5,14 @@ import {
 } from 'react-native';
 import { loginStudent, registerStudent } from '../services/firebase';
 import { router } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 // Auth categories removed to preference screen
 
 export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -19,10 +21,18 @@ export default function LoginScreen() {
   const [lastName, setLastName] = useState('');
 
   // Removed preferences state
+  const validateEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const handleAuth = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please enter your email and password.');
+      return;
+    }
+
+    if (!validateEmail(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
 
@@ -49,15 +59,19 @@ export default function LoginScreen() {
       // Navigate to main tabs upon success
       router.replace('/(tabs)');
     } catch (error: any) {
+      console.log("Auth error code:", error.code);
       let message = 'An error occurred. Please try again.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+      
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         message = 'Invalid email or password.';
       } else if (error.code === 'auth/email-already-in-use') {
         message = 'This email is already in use by another account.';
       } else if (error.code === 'auth/weak-password') {
         message = 'Password must be at least 6 characters.';
       } else if (error.code === 'auth/invalid-email') {
-        message = 'Please enter a valid email address.';
+        message = 'The email address format is invalid.';
+      } else if (error.code === 'auth/too-many-requests') {
+        message = 'Too many failed attempts. Please try again later.';
       }
       
       Alert.alert('Authentication Failed', message);
@@ -65,7 +79,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-
   // Render chips moved
 
   return (
@@ -120,14 +133,26 @@ export default function LoginScreen() {
             />
 
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor="#6B7280"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1, borderWidth: 0 }]}
+                placeholder="••••••••"
+                placeholderTextColor="#6B7280"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <Pressable 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={20} 
+                  color="#6B7280" 
+                />
+              </Pressable>
+            </View>
 
             <Pressable 
               style={[styles.button, loading && styles.buttonDisabled]} 
@@ -227,6 +252,18 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     color: '#333',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAF8',
+    borderWidth: 1,
+    borderColor: '#E0E7E0',
+    borderRadius: 12,
+  },
+  eyeIcon: {
+    padding: 10,
+    marginRight: 4,
   },
   preferencesSection: {
     marginTop: 20,

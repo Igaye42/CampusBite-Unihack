@@ -49,11 +49,13 @@ export default function PreferencesScreen() {
 
       await updateStudentPreferences(user.uid, preferencesData);
       
-      if (studentData?.preferencesSet) {
-        // If already set, we are editing, so return to Account tab safely
+      if (studentData?.preferencesSet && router.canGoBack()) {
+        // If already set and we have history (editing), go back
         router.back();
+      } else {
+        // Otherwise (signup or refreshed root), go to tabs
+        router.replace('/(tabs)');
       }
-      // Otherwise, let _layout.tsx naturally route them due to studentData.preferencesSet updating
     } catch (error) {
       console.error("Failed to save preferences:", error);
       Alert.alert('Error', 'Could not save your preferences. Please try again.');
