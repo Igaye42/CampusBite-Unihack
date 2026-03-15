@@ -2,6 +2,7 @@ import { initializeApp, getApp, getApps } from "firebase/app";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -174,7 +175,7 @@ export async function updateStudentProfile(userId: string, currentEmail: string,
  * @param {Object} manualData - Optional manual overrides from the frontend.
  * @returns {Promise<String>} The generated document ID.
  */
-export async function uploadFoodListing(aiData: any, locationData: any, manualData: any = {}, uploaderId: string, uploaderName: string) {
+export async function uploadFoodListing(aiData: any, locationData: any, manualData: any = {}, uploaderId: string, uploaderName: string, uploaderAvatar?: string, imageBase64?: string) {
   try {
     const finalDeadline =
       manualData.pickup_deadline &&
@@ -202,14 +203,59 @@ export async function uploadFoodListing(aiData: any, locationData: any, manualDa
       status: "available",
       uploaderId,
       uploaderName,
+      uploaderAvatar: uploaderAvatar || null,
+      imageBase64: imageBase64 || null,
       createdAt: serverTimestamp()
     };
 
     const docRef = await addDoc(collection(db, "listings"), listing);
+    
+    // Increment user's post count
+    const studentRef = doc(db, "students", uploaderId);
+    await updateDoc(studentRef, {
+      posts: increment(1)
+    });
+
     console.log("Listing successfully created with ID:", docRef.id);
     return docRef.id;
   } catch (e) {
     console.error("Error adding listing:", e);
+    throw e;
+  }
+}
+
+/**
+ * Updates an existing food listing.
+ */
+export async function updateFoodListing(listingId: string, updateData: any) {
+  try {
+    const listingRef = doc(db, "listings", listingId);
+    await updateDoc(listingRef, {
+      ...updateData,
+      updatedAt: serverTimestamp()
+    });
+    console.log("Listing updated:", listingId);
+  } catch (e) {
+    console.error("Error updating listing:", e);
+    throw e;
+  }
+}
+
+/**
+ * Deletes a food listing and decrements the uploader's post count.
+ */
+export async function deleteFoodListing(listingId: string, uploaderId: string) {
+  try {
+    await deleteDoc(doc(db, "listings", listingId));
+    
+    const studentRef = doc(db, "students", uploaderId);
+    await updateDoc(studentRef, {
+      posts: increment(-1)
+    });
+    
+    console.log("Listing deleted:", listingId);
+  } catch (e) {
+    console.error("Error deleting listing:", e);
     throw e;
   }
 }
@@ -239,7 +285,7 @@ export async function getAvailableListings() {
       const isNotExpired = deadline ? deadline.getTime() > now.getTime() : true;
 
       if (isNotExpired) {
-        listings.push({ id: doc.id, ...data });
+        listings.push({ id: doc.id, ...doc.data() });
       }
     });
 
@@ -284,7 +330,7 @@ export function subscribeToAvailableListings(callback: any) {
         const isNotExpired = deadline ? deadline.getTime() > now.getTime() : true;
 
         if (isNotExpired) {
-          listings.push({ id: doc.id, ...data });
+          listings.push({ id: doc.id, ...doc.data() });
         }
       });
 
@@ -336,6 +382,42 @@ export function subscribeToUserListings(userId: string, callback: any) {
     },
     (error) => {
       console.error("Error listening to user listings: ", error);
+    }
+  );
+
+  return unsubscribe;
+}
+
+/**
+ * Sets up a real-time listener for listings claimed by a specific user.
+ */
+export function subscribeToUserClaims(userId: string, callback: any) {
+  const q = query(
+    collection(db, "listings"),
+    where("status", "==", "claimed"),
+    where("claimerId", "==", userId)
+  );
+
+  const unsubscribe = onSnapshot(
+    q,
+    (querySnapshot) => {
+      const listings: any[] = [];
+      querySnapshot.forEach((doc) => {
+        listings.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Sort by claimedAt descending
+      listings.sort((a, b) => {
+        const aTime = a.claimedAt?.toMillis() || 0;
+        const bTime = b.claimedAt?.toMillis() || 0;
+        return bTime - aTime;
+      });
+
+      console.log(`User claims update: ${listings.length} items.`);
+      callback(listings);
+    },
+    (error) => {
+      console.error("Error listening to user claims: ", error);
     }
   );
 
@@ -421,9 +503,10 @@ export function subscribeToTopLocation(callback: any) {
 /**
  * Executes an atomic transaction to claim a listing and updates dynamic campus impact metrics.
  * @param {String} listingId - The document ID of the listing to claim.
+ * @param {String} claimerId - The ID of the user claiming the listing.
  * @returns {Promise<String>} The generated 4-character claim code.
  */
-export async function claimListing(listingId: string) {
+export async function claimListing(listingId: string, claimerId: string) {
   try {
     const claimCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     const listingRef = doc(db, "listings", listingId);
@@ -441,10 +524,17 @@ export async function claimListing(listingId: string) {
     await updateDoc(listingRef, {
       status: "claimed",
       claim_code: claimCode,
+      claimerId: claimerId,
       claimedAt: serverTimestamp()
     });
 
-    // 3. Increment the global campus impact metrics dynamically
+    // 3. Increment user's claim count
+    const studentRef = doc(db, "students", claimerId);
+    await updateDoc(studentRef, {
+      claims: increment(1)
+    });
+
+    // 4. Increment the global campus impact metrics dynamically
     const metricsRef = doc(db, "metrics", "campus_totals");
     await updateDoc(metricsRef, {
       mealsSaved: increment(1),

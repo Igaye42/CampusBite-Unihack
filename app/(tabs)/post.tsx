@@ -15,7 +15,12 @@ import {
   View
 } from "react-native";
 
-import { uploadFoodListing, subscribeToUserListings } from "../../services/firebase";
+import { 
+  uploadFoodListing, 
+  subscribeToUserListings, 
+  deleteFoodListing, 
+  updateFoodListing 
+} from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
 import LocationAutocomplete, {
   SelectedLocation
@@ -44,6 +49,7 @@ const WARNING_OPTIONS = [
 export default function PostScreen() {
   const { user, studentData } = useAuth();
   const [isCreatingListing, setIsCreatingListing] = useState(false);
+  const [editingListing, setEditingListing] = useState<any>(null);
   const [userListings, setUserListings] = useState<any[]>([]);
 
   const [imageUri, setImageUri] = useState("");
@@ -91,6 +97,7 @@ export default function PostScreen() {
     setAllergenWarnings([]);
     setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
     setIsCreatingListing(false);
+    setEditingListing(null);
   };
 
   const formatDeadlineDisplay = (date: Date) => {
@@ -242,7 +249,9 @@ export default function PostScreen() {
           locationDetails: locationDetails.trim()
         },
         user!.uid,
-        studentData?.displayName || "Anonymous"
+        studentData?.displayName || "Anonymous",
+        studentData?.avatarUrl,
+        imageBase64 // Fix: passing imageBase64 to save food image
       );
 
       Alert.alert("Success", "Food listing posted successfully.", [
@@ -259,6 +268,63 @@ export default function PostScreen() {
     } finally {
       setIsPosting(false);
     }
+  };
+
+  const handleUpdate = async () => {
+    if (!editingListing) return;
+    try {
+      setIsPosting(true);
+      await updateFoodListing(editingListing.id, {
+        food_title: foodTitle,
+        category,
+        estimated_qty: quantity,
+        dietary_tags: dietaryTags,
+        allergen_warnings: allergenWarnings,
+        pickup_deadline: deadline.toISOString(),
+        locationDetails: locationDetails.trim()
+      });
+      Alert.alert("Success", "Listing updated.");
+      resetForm();
+    } catch (e) {
+      Alert.alert("Error", "Failed to update listing.");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const handleDelete = (listingId: string) => {
+    Alert.alert("Delete Listing", "Are you sure you want to delete this listing?", [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Delete", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            await deleteFoodListing(listingId, user!.uid);
+          } catch (e) {
+            Alert.alert("Error", "Failed to delete listing.");
+          }
+        }
+      }
+    ]);
+  };
+
+  const startEditing = (listing: any) => {
+    setEditingListing(listing);
+    setFoodTitle(listing.food_title);
+    setCategory(listing.category);
+    setQuantity(String(listing.estimated_qty));
+    setDietaryTags(listing.dietary_tags || []);
+    setAllergenWarnings(listing.allergen_warnings || []);
+    setDeadline(new Date(listing.pickup_deadline));
+    setLocationInput(listing.locationName);
+    setSelectedLocation({
+      locationName: listing.locationName,
+      latitude: listing.latitude,
+      longitude: listing.longitude
+    });
+    setLocationDetails(listing.locationDetails || "");
+    setIsCreatingListing(true);
   };
 
   if (!isCreatingListing) {
@@ -297,8 +363,13 @@ export default function PostScreen() {
                   </Text>
                 </View>
                 {listing.status === 'available' ? (
-                  <View style={styles.statusBadgeAvailable}>
-                    <Text style={styles.statusTextAvailable}>Active</Text>
+                  <View style={styles.actionRow}>
+                    <Pressable style={styles.editButton} onPress={() => startEditing(listing)}>
+                      <Ionicons name="pencil" size={16} color="#2E7D32" />
+                    </Pressable>
+                    <Pressable style={styles.deleteButton} onPress={() => handleDelete(listing.id)}>
+                      <Ionicons name="trash-outline" size={16} color="#C62828" />
+                    </Pressable>
                   </View>
                 ) : (
                   <View style={styles.statusBadgeClaimed}>
@@ -322,10 +393,10 @@ export default function PostScreen() {
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.formHeader}>
-        <Pressable onPress={() => setIsCreatingListing(false)} style={styles.backButton}>
+        <Pressable onPress={() => { resetForm(); setIsCreatingListing(false); }} style={styles.backButton}>
           <Ionicons name="close" size={24} color="#1B4332" />
         </Pressable>
-        <Text style={styles.formHeaderText}>New Listing</Text>
+        <Text style={styles.formHeaderText}>{editingListing ? "Edit Listing" : "New Listing"}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -479,14 +550,14 @@ export default function PostScreen() {
         )}
 
         <Pressable
-          style={[styles.postButton, isPosting && styles.postButtonDisabled]}
-          onPress={handlePost}
-          disabled={isPosting}
+          style={[styles.postButton, (isPosting || (!editingListing && !imageBase64)) && styles.postButtonDisabled]}
+          onPress={editingListing ? handleUpdate : handlePost}
+          disabled={isPosting || (!editingListing && !imageBase64)}
         >
           {isPosting ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.postButtonText}>Post Food</Text>
+            <Text style={styles.postButtonText}>{editingListing ? "Update Listing" : "Post Food"}</Text>
           )}
         </Pressable>
       </ScrollView>
@@ -597,9 +668,23 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusTextClaimed: {
-    color: "#9E9E9E",
+    color: "#757575",
     fontSize: 12,
     fontWeight: "700",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: "#E8F5E9",
+    padding: 8,
+    borderRadius: 8,
+  },
+  deleteButton: {
+    backgroundColor: "#FFEBEE",
+    padding: 8,
+    borderRadius: 8,
   },
   emptyState: {
     alignItems: "center",

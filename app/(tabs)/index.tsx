@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, Image } from 'react-native';
 import { getAvailableListings, subscribeToAvailableListings } from '../../services/firebase';
+import { useAuth } from '../../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 // Updated to match the new exact schema options
 const DIETARY_TAGS = ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'];
@@ -24,6 +26,7 @@ function getUrgencyColor(minutesLeft: number) {
 }
 
 export default function HomeScreen() {
+  const { user } = useAuth();
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +64,10 @@ return {
   dietary_tags: item.dietary_tags || item.tags || [],
   allergen_warnings: item.allergen_warnings || [],
   pickupBy: pickupByTime,
+  uploaderId: item.uploaderId,
+  uploaderName: item.uploaderName || "Anonymous",
+  uploaderAvatar: item.uploaderAvatar || null,
+  imageBase64: item.imageBase64 || null,
 };
       });
 
@@ -196,10 +203,24 @@ return {
         }
         renderItem={({ item }) => (
           <View style={styles.card}>
+            {/* NEW: Food Image Section */}
+            <View style={styles.imageContainer}>
+              {item.imageBase64 ? (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+                  style={styles.foodImage}
+                />
+              ) : (
+                <View style={[styles.foodImage, styles.placeholderImage]}>
+                  <Text style={styles.placeholderEmoji}>
+                    {getFoodEmoji(item.food_title, item.category)}
+                  </Text>
+                </View>
+              )}
+            </View>
+
             <View style={styles.topRow}>
-              <Text style={styles.title}>
-                {getFoodEmoji(item.food_title, item.category)} {item.food_title}
-              </Text>
+              <Text style={styles.title}>{item.food_title}</Text>
               <Text
                 style={[
                   styles.timeBadge,
@@ -208,6 +229,20 @@ return {
               >
                 {item.minutesLeft} min left
               </Text>
+            </View>
+
+            {/* NEW: Uploader Info Row */}
+            <View style={styles.uploaderRow}>
+              {item.uploaderAvatar ? (
+                <Image source={{ uri: item.uploaderAvatar }} style={styles.uploaderAvatar} />
+              ) : (
+                <View style={styles.uploaderAvatarPlaceholder}>
+                  <Text style={styles.uploaderAvatarText}>
+                    {item.uploaderName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.uploaderName}>Posted by {item.uploaderName}</Text>
             </View>
 
 <Text style={styles.categoryTag}>Category: {item.category}</Text>
@@ -251,26 +286,35 @@ return {
               </View>
             )}
 
-            <Pressable
-              style={styles.button}
-              onPress={() =>
-                router.push({
-                  pathname: '/claim',
-params: {
-  id: item.id,
-  food_title: item.food_title,
-  qty: String(item.quantity),
-  location: item.location,
-  locationDetails: item.locationDetails || "",
-  latitude: item.latitude ? String(item.latitude) : "",
-  longitude: item.longitude ? String(item.longitude) : "",
-  safety_risk: String(item.safety_risk)
-},
-                })
-              }
-            >
-              <Text style={styles.buttonText}>Claim</Text>
-            </Pressable>
+            {item.uploaderId === user?.uid ? (
+              <View style={[styles.button, styles.disabledButton]}>
+                <View style={styles.buttonRow}>
+                  <Ionicons name="ban" size={20} color="#9E9E9E" />
+                  <Text style={[styles.buttonText, styles.disabledButtonText]}> Your Listing</Text>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                style={styles.button}
+                onPress={() =>
+                  router.push({
+                    pathname: '/claim',
+                    params: {
+                      id: item.id,
+                      food_title: item.food_title,
+                      qty: String(item.quantity),
+                      location: item.location,
+                      locationDetails: item.locationDetails || "",
+                      latitude: item.latitude ? String(item.latitude) : "",
+                      longitude: item.longitude ? String(item.longitude) : "",
+                      safety_risk: String(item.safety_risk)
+                    },
+                  })
+                }
+              >
+                <Text style={styles.buttonText}>Claim</Text>
+              </Pressable>
+            )}
           </View>
         )}
       />
@@ -289,6 +333,55 @@ const styles = StyleSheet.create({
   filterPillTextSelected: { color: '#2E7D32', fontWeight: '700' },
   listContent: { paddingBottom: 24 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 14, elevation: 3 },
+  imageContainer: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  foodImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  placeholderImage: {
+    backgroundColor: '#F1F8F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderEmoji: {
+    fontSize: 50,
+  },
+  uploaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  uploaderAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  uploaderAvatarPlaceholder: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2E7D32',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploaderAvatarText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  uploaderName: {
+    fontSize: 14,
+    color: '#5C6F65',
+    fontWeight: '600',
+  },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 8 },
   title: { fontSize: 20, fontWeight: '800', color: '#222', flex: 1 },
   timeBadge: { fontSize: 12, fontWeight: '700', borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, overflow: 'hidden' },
@@ -310,6 +403,9 @@ const styles = StyleSheet.create({
   warningText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
   button: { backgroundColor: '#2E7D32', paddingVertical: 13, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  buttonRow: { flexDirection: 'row', alignItems: 'center' },
+  disabledButton: { backgroundColor: '#E0E0E0' },
+  disabledButtonText: { color: '#9E9E9E' },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },

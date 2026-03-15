@@ -11,32 +11,34 @@ import {
   Text,
   View
 } from "react-native";
+import { useAuth } from "../../context/AuthContext";
 import {
   claimListing,
-  subscribeToClaimedListings
+  subscribeToUserClaims
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
+  const { user } = useAuth();
   // FIXED: Added safety_risk to the destructured object and its type definition
-const {
-  id,
-  food_title,
-  qty,
-  location,
-  locationDetails,
-  latitude,
-  longitude,
-  safety_risk
-} = useLocalSearchParams<{
-  id?: string;
-  food_title?: string;
-  qty?: string;
-  location?: string;
-  locationDetails?: string;
-  latitude?: string;
-  longitude?: string;
-  safety_risk?: string;
-}>();
+  const {
+    id,
+    food_title,
+    qty,
+    location,
+    locationDetails,
+    latitude,
+    longitude,
+    safety_risk
+  } = useLocalSearchParams<{
+    id?: string;
+    food_title?: string;
+    qty?: string;
+    location?: string;
+    locationDetails?: string;
+    latitude?: string;
+    longitude?: string;
+    safety_risk?: string;
+  }>();
 
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
@@ -54,17 +56,19 @@ const {
   }, [id]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToClaimedListings((data: any[]) => {
-      setRecentClaims(data);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (user) {
+      const unsubscribe = subscribeToUserClaims(user.uid, (data: any[]) => {
+        setRecentClaims(data);
+      });
+      return () => unsubscribe();
+    }
+  }, [user]);
 
   const executeClaim = async () => {
     setClaiming(true);
     try {
       // Non-null assertion as id is verified before this function is called
-      const code = await claimListing(id!);
+      const code = await claimListing(id!, user!.uid);
       setPickupCode(code);
       setClaimed(true);
     } catch (error) {
@@ -144,10 +148,10 @@ const {
           <Text style={styles.detail}>
             📦 {qty ? `${qty} items` : "Unknown quantity"}
           </Text>
-<Text style={styles.detail}>📍 {location || "Unknown Location"}</Text>
-{locationDetails ? (
-  <Text style={styles.detail}>🏢 {locationDetails}</Text>
-) : null}
+          <Text style={styles.detail}>📍 {location || "Unknown Location"}</Text>
+          {locationDetails ? (
+            <Text style={styles.detail}>🏢 {locationDetails}</Text>
+          ) : null}
 
           <Pressable
             style={{ marginBottom: 16, marginTop: 4 }}
@@ -188,12 +192,12 @@ const {
         </View>
       )}
 
-      <Pressable 
-        style={styles.historyHeader} 
+      <Pressable
+        style={styles.historyHeader}
         onPress={() => setShowHistory(!showHistory)}
       >
         <Text style={[styles.heading, { marginTop: 0, marginBottom: 0, fontSize: 20 }]}>
-          Recently Claimed Feed
+          Your Recently Claimed
         </Text>
         <Text style={styles.arrowIcon}>{showHistory ? '▼' : '▶'}</Text>
       </Pressable>
@@ -222,6 +226,11 @@ const {
                     hour: "2-digit",
                     minute: "2-digit"
                   })}
+                </Text>
+              )}
+              {item.claim_code && (
+                <Text style={[styles.historyDetail, { color: "#2E7D32", fontWeight: "700", marginTop: 4 }]}>
+                  Pickup Code: {item.claim_code}
                 </Text>
               )}
             </View>
