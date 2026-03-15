@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
@@ -14,11 +13,10 @@ type LocationSuggestion = {
   display_name: string;
   lat: string;
   lon: string;
-  name?: string;
   aliases?: string[];
 };
 
-type SelectedLocation = {
+export type SelectedLocation = {
   locationName: string;
   latitude: number;
   longitude: number;
@@ -37,12 +35,7 @@ const MONASH_LOCATIONS: LocationSuggestion[] = [
     display_name: "Learning and Teaching Building, Monash Clayton",
     lat: "-37.9112",
     lon: "145.1340",
-    aliases: [
-      "ltb",
-      "learning and teaching building",
-      "learning teaching",
-      "teaching building"
-    ]
+    aliases: ["ltb", "learning and teaching building", "learning teaching", "teaching building"]
   },
   {
     place_id: "campus-centre",
@@ -71,6 +64,13 @@ const MONASH_LOCATIONS: LocationSuggestion[] = [
     lat: "-37.9089",
     lon: "145.1328",
     aliases: ["engineering", "eng building", "engineering building"]
+  },
+  {
+    place_id: "hargraves",
+    display_name: "Hargrave-Andrew Library, Monash Clayton",
+    lat: "-37.9104",
+    lon: "145.1349",
+    aliases: ["hargraves", "hargrave", "hargrave-andrew library"]
   }
 ];
 
@@ -92,7 +92,7 @@ export default function LocationAutocomplete({
 
     const timeout = setTimeout(() => {
       fetchSuggestions(value);
-    }, 400);
+    }, 350);
 
     return () => clearTimeout(timeout);
   }, [value]);
@@ -101,7 +101,6 @@ export default function LocationAutocomplete({
     try {
       setLoading(true);
 
-      // local alias match
       const lowerQuery = query.toLowerCase().trim();
 
       const localMatches = MONASH_LOCATIONS.filter((item) => {
@@ -112,13 +111,15 @@ export default function LocationAutocomplete({
         return inName || inAliases;
       });
 
-      // fallback online search
+      // Bias results around Monash Clayton
       const url =
         `https://nominatim.openstreetmap.org/search?` +
-        `q=${encodeURIComponent(
-          query + " Monash University Melbourne Australia"
-        )}` +
-        `&format=json&addressdetails=1&limit=6`;
+        `q=${encodeURIComponent(query + " Monash University Clayton Victoria Australia")}` +
+        `&format=json` +
+        `&addressdetails=1` +
+        `&limit=8` +
+        `&bounded=1` +
+        `&viewbox=145.125,-37.905,145.145,-37.918`;
 
       const response = await fetch(url, {
         headers: {
@@ -129,16 +130,13 @@ export default function LocationAutocomplete({
       const data = await response.json();
       const osmMatches: LocationSuggestion[] = Array.isArray(data) ? data : [];
 
-      // merge local + osm without duplicates
       const merged = [...localMatches];
       for (const item of osmMatches) {
         const exists = merged.some(
           (m) =>
             m.display_name.toLowerCase() === item.display_name.toLowerCase()
         );
-        if (!exists) {
-          merged.push(item);
-        }
+        if (!exists) merged.push(item);
       }
 
       setSuggestions(merged);
@@ -152,15 +150,12 @@ export default function LocationAutocomplete({
   };
 
   const handleSelect = (item: LocationSuggestion) => {
-    const locationName = item.display_name;
-
-    onChangeText(locationName);
+    onChangeText(item.display_name);
     onSelectLocation({
-      locationName,
+      locationName: item.display_name,
       latitude: Number(item.lat),
       longitude: Number(item.lon)
     });
-
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -186,19 +181,15 @@ export default function LocationAutocomplete({
 
       {showSuggestions && suggestions.length > 0 && (
         <View style={styles.dropdown}>
-          <FlatList
-            keyboardShouldPersistTaps="handled"
-            data={suggestions}
-            keyExtractor={(item) => String(item.place_id)}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.suggestionItem}
-                onPress={() => handleSelect(item)}
-              >
-                <Text style={styles.suggestionText}>{item.display_name}</Text>
-              </Pressable>
-            )}
-          />
+          {suggestions.map((item) => (
+            <Pressable
+              key={String(item.place_id)}
+              style={styles.suggestionItem}
+              onPress={() => handleSelect(item)}
+            >
+              <Text style={styles.suggestionText}>{item.display_name}</Text>
+            </Pressable>
+          ))}
         </View>
       )}
 
@@ -240,7 +231,6 @@ const styles = StyleSheet.create({
     borderColor: "#DDE5DB",
     borderRadius: 12,
     marginTop: 8,
-    maxHeight: 220,
     overflow: "hidden"
   },
   suggestionItem: {

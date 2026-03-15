@@ -46,22 +46,22 @@ export default function HomeScreen() {
           });
         }
 
-        return {
-          id: item.id,
-          food_title: item.food_title || 'Food Item',
-          category: item.category || 'other',
-          quantity: item.estimated_qty || 'Some',
-          weight: item.estimated_weight_kg || 0.35,
-          safety_risk: item.safety_risk || false,
-location: item.locationName || item.location || 'Unknown Location',
-latitude: item.latitude || null,
-longitude: item.longitude || null,
-          pickup_deadline: item.pickup_deadline || null,
-          // NEW: Splitting tags into dietary and allergens
-dietary_tags: item.dietary_tags || item.tags || [],
-allergen_warnings: item.allergen_warnings || [],
-          pickupBy: pickupByTime,
-        };
+return {
+  id: item.id,
+  food_title: item.food_title || "Food Item",
+  category: item.category || "other",
+  quantity: item.estimated_qty || "Some",
+  weight: item.estimated_weight_kg || 0.35,
+  safety_risk: item.safety_risk || false,
+  location: item.locationName || item.location || "Unknown Location",
+  locationDetails: item.locationDetails || "",
+  latitude: item.latitude || null,
+  longitude: item.longitude || null,
+  pickup_deadline: item.pickup_deadline || null,
+  dietary_tags: item.dietary_tags || item.tags || [],
+  allergen_warnings: item.allergen_warnings || [],
+  pickupBy: pickupByTime,
+};
       });
 
       setListings(formattedListings);
@@ -210,10 +210,13 @@ allergen_warnings: item.allergen_warnings || [],
               </Text>
             </View>
 
-            <Text style={styles.categoryTag}>Category: {item.category}</Text>
-            <Text style={styles.detail}>📍 {item.location}</Text>
-            <Text style={styles.detail}>📦 {item.quantity} items (~{item.weight}kg)</Text>
-            <Text style={styles.detail}>⏰ Pickup by {item.pickupBy}</Text>
+<Text style={styles.categoryTag}>Category: {item.category}</Text>
+<Text style={styles.detail}>📍 {item.location}</Text>
+{item.locationDetails ? (
+  <Text style={styles.detail}>🏢 {item.locationDetails}</Text>
+) : null}
+<Text style={styles.detail}>📦 {item.quantity} items (~{item.weight}kg)</Text>
+<Text style={styles.detail}>⏰ Pickup by {item.pickupBy}</Text>
 
             {item.safety_risk && (
               <Text style={styles.safetyRiskText}>⚠️ High Safety Risk (Needs Refrigerator)</Text>

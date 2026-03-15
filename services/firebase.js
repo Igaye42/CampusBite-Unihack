@@ -36,44 +36,40 @@ export const db = getFirestore(app);
  * @param {Object} manualData - Optional manual overrides from the frontend.
  * @returns {Promise<String>} The generated document ID.
  */
-export async function uploadFoodListing(aiData, locationData, manualData = {}) {
+export async function uploadFoodListing(aiData: any, locationData: any, manualData: any = {}) {
   try {
-    const manualTags = Array.isArray(manualData.tags) ? manualData.tags : [];
-    const finalTags =
-      manualTags.length > 0 ? manualTags : aiData.suggested_tags || [];
-
     const finalDeadline =
       manualData.pickup_deadline &&
       !isNaN(new Date(manualData.pickup_deadline).getTime())
         ? new Date(manualData.pickup_deadline).toISOString()
         : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-const listing = {
-  food_title: manualData.food_title || aiData.food_title,
-  category: manualData.category || aiData.category,
-  estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
-  estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
-  safety_risk: aiData.safety_risk,
+    const listing = {
+      food_title: manualData.food_title || aiData.food_title,
+      category: manualData.category || aiData.category,
+      estimated_qty: manualData.estimated_qty || aiData.estimated_qty,
+      estimated_weight_kg: aiData.estimated_weight_kg || 0.35,
+      safety_risk: aiData.safety_risk,
 
-  tags: finalTags,
-  dietary_tags: aiData.dietary_tags || finalTags || [],
-  allergen_warnings: aiData.allergen_warnings || [],
+      dietary_tags: manualData.dietary_tags || aiData.dietary_tags || [],
+      allergen_warnings: manualData.allergen_warnings || aiData.allergen_warnings || [],
 
-  location: locationData.locationName,
-  locationName: locationData.locationName,
-  latitude: locationData.latitude,
-  longitude: locationData.longitude,
+      location: locationData.locationName,
+      locationName: locationData.locationName,
+      latitude: locationData.latitude,
+      longitude: locationData.longitude,
+      locationDetails: manualData.locationDetails || "",
 
-  pickup_deadline: finalDeadline,
-  status: "available",
-  createdAt: serverTimestamp()
-};
+      pickup_deadline: finalDeadline,
+      status: "available",
+      createdAt: serverTimestamp()
+    };
 
     const docRef = await addDoc(collection(db, "listings"), listing);
-    console.log("Listing successfully created with ID: ", docRef.id);
+    console.log("Listing successfully created with ID:", docRef.id);
     return docRef.id;
   } catch (e) {
-    console.error("Error adding listing: ", e);
+    console.error("Error adding listing:", e);
     throw e;
   }
 }

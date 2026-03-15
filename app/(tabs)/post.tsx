@@ -17,12 +17,27 @@ import {
 
 import { uploadFoodListing } from "../../services/firebase";
 import { analyzeFoodImage } from "../../services/gemini";
+import LocationAutocomplete, {
+  SelectedLocation
+} from "../../components/LocationAutocomplete";
 
 const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
-
-// NEW: Define standardized options matching our Gemini Schema
-const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Halal', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Seafood-Free'];
-const WARNING_OPTIONS = ['Contains Peanuts', 'Contains Nuts', 'Contains Seafood', 'Contains Dairy', 'Contains Eggs'];
+const DIETARY_OPTIONS = [
+  "Vegetarian",
+  "Vegan",
+  "Halal",
+  "Gluten-Free",
+  "Dairy-Free",
+  "Nut-Free",
+  "Seafood-Free"
+];
+const WARNING_OPTIONS = [
+  "Contains Peanuts",
+  "Contains Nuts",
+  "Contains Seafood",
+  "Contains Dairy",
+  "Contains Eggs"
+];
 
 export default function PostScreen() {
   const [imageUri, setImageUri] = useState("");
@@ -31,10 +46,11 @@ export default function PostScreen() {
   const [foodTitle, setFoodTitle] = useState("");
   const [category, setCategory] = useState("");
 
-  const [location, setLocation] = useState("");
+  const [locationInput, setLocationInput] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+  const [locationDetails, setLocationDetails] = useState("");
+
   const [quantity, setQuantity] = useState("");
-  
-  // FIXED: States are now arrays to handle multi-select pills
   const [dietaryTags, setDietaryTags] = useState<string[]>([]);
   const [allergenWarnings, setAllergenWarnings] = useState<string[]>([]);
 
@@ -56,16 +72,17 @@ export default function PostScreen() {
     });
   };
 
-  // Helper functions to toggle pill selection
   const toggleDietaryTag = (tag: string) => {
-    setDietaryTags((prev) => 
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    setDietaryTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
   const toggleWarning = (warning: string) => {
-    setAllergenWarnings((prev) => 
-      prev.includes(warning) ? prev.filter(w => w !== warning) : [...prev, warning]
+    setAllergenWarnings((prev) =>
+      prev.includes(warning)
+        ? prev.filter((w) => w !== warning)
+        : [...prev, warning]
     );
   };
 
@@ -74,15 +91,12 @@ export default function PostScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert(
-          "Permission needed",
-          "Please allow photo access to upload food."
-        );
+        Alert.alert("Permission needed", "Please allow photo access to upload food.");
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Updated to fix deprecation warning
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 0.7,
         base64: true
@@ -106,7 +120,7 @@ export default function PostScreen() {
       if (aiData.contains_multiple_food_types) {
         Alert.alert(
           "Multiple Foods Detected 🛑",
-          "Please post only one type of food per listing to make claiming easier. If you have different items, please take separate photos and make multiple posts."
+          "Please post only one type of food per listing."
         );
         setImageUri("");
         setImageBase64("");
@@ -118,20 +132,10 @@ export default function PostScreen() {
       setCategory(aiData.category || "other");
 
       if (aiData.estimated_qty) setQuantity(String(aiData.estimated_qty));
-      
-      // Auto-fill arrays from AI
-      if (aiData.dietary_tags && Array.isArray(aiData.dietary_tags)) {
-        setDietaryTags(aiData.dietary_tags);
-      } else {
-        setDietaryTags([]);
-      }
-      
-      if (aiData.allergen_warnings && Array.isArray(aiData.allergen_warnings)) {
-        setAllergenWarnings(aiData.allergen_warnings);
-      } else {
-        setAllergenWarnings([]);
-      }
-
+      setDietaryTags(Array.isArray(aiData.dietary_tags) ? aiData.dietary_tags : []);
+      setAllergenWarnings(
+        Array.isArray(aiData.allergen_warnings) ? aiData.allergen_warnings : []
+      );
     } catch (error) {
       console.error("Image analysis failed:", error);
       Alert.alert("AI Error", "Failed to analyze the food image.");
@@ -145,10 +149,7 @@ export default function PostScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Allow location access to auto-fill your address."
-        );
+        Alert.alert("Permission Denied", "Allow location access to auto-fill your address.");
         return;
       }
 
@@ -158,11 +159,16 @@ export default function PostScreen() {
         longitude: locationData.coords.longitude
       });
 
-      if (geocode.length > 0) {
-        const address = geocode[0];
-        const formattedAddress = `${address.name || ""} ${address.street || ""}`.trim();
-        setLocation(formattedAddress || "Unknown Location");
-      }
+      const address = geocode[0];
+      const formattedAddress =
+        `${address?.name || ""} ${address?.street || ""}`.trim() || "Current Location";
+
+      setLocationInput(formattedAddress);
+      setSelectedLocation({
+        locationName: formattedAddress,
+        latitude: locationData.coords.latitude,
+        longitude: locationData.coords.longitude
+      });
     } catch (error) {
       console.error("Location error:", error);
       Alert.alert("Error", "Could not fetch current location.");
@@ -173,15 +179,12 @@ export default function PostScreen() {
 
   const handlePost = async () => {
     if (!imageBase64 || !aiAnalysisResult) {
-      Alert.alert(
-        "Missing photo",
-        "Please upload and analyze a food photo first."
-      );
+      Alert.alert("Missing photo", "Please upload and analyze a food photo first.");
       return;
     }
 
-    if (!location.trim()) {
-      Alert.alert("Missing location", "Please enter a pickup location.");
+    if (!selectedLocation) {
+      Alert.alert("Missing location", "Please search and tap a location suggestion.");
       return;
     }
 
@@ -191,51 +194,43 @@ export default function PostScreen() {
       const finalData = {
         ...aiAnalysisResult,
         food_title: foodTitle,
-        category: category,
+        category,
         estimated_qty: quantity
       };
 
-      // Pass the arrays directly, no need to split strings anymore
-      await uploadFoodListing(finalData, location.trim(), {
+      await uploadFoodListing(finalData, selectedLocation, {
         food_title: foodTitle,
-        category: category,
+        category,
         estimated_qty: quantity,
         dietary_tags: dietaryTags,
         allergen_warnings: allergenWarnings,
-        pickup_deadline: deadline.toISOString()
+        pickup_deadline: deadline.toISOString(),
+        locationDetails: locationDetails.trim()
       });
 
-      Alert.alert(
-        "Success",
-        "Food listing posted successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Reset states
-              setImageUri("");
-              setImageBase64("");
-              setAiAnalysisResult(null);
-              setFoodTitle("");
-              setCategory("");
-              setLocation("");
-              setQuantity("");
-              setDietaryTags([]);
-              setAllergenWarnings([]);
-              setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
-              
-              router.replace('/');
-            }
+      Alert.alert("Success", "Food listing posted successfully.", [
+        {
+          text: "OK",
+          onPress: () => {
+            setImageUri("");
+            setImageBase64("");
+            setAiAnalysisResult(null);
+            setFoodTitle("");
+            setCategory("");
+            setLocationInput("");
+            setSelectedLocation(null);
+            setLocationDetails("");
+            setQuantity("");
+            setDietaryTags([]);
+            setAllergenWarnings([]);
+            setDeadline(new Date(Date.now() + 2 * 60 * 60 * 1000));
+            router.replace("/");
           }
-        ]
-      );
-
+        }
+      ]);
     } catch (error) {
       console.error("Post failed:", error);
-      Alert.alert(
-        "Post failed",
-        "Something went wrong while posting the listing."
-      );
+      Alert.alert("Post failed", "Something went wrong while posting the listing.");
     } finally {
       setIsPosting(false);
     }
@@ -255,9 +250,7 @@ export default function PostScreen() {
         </Text>
       </Pressable>
 
-      {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.previewImage} />
-      ) : null}
+      {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} /> : null}
 
       {isAnalyzing ? (
         <View style={styles.loadingBox}>
@@ -279,18 +272,10 @@ export default function PostScreen() {
         {CATEGORIES.map((cat) => (
           <Pressable
             key={cat}
-            style={[
-              styles.categoryPill,
-              category === cat && styles.categoryPillActive
-            ]}
+            style={[styles.categoryPill, category === cat && styles.categoryPillActive]}
             onPress={() => setCategory(cat)}
           >
-            <Text
-              style={[
-                styles.categoryText,
-                category === cat && styles.categoryTextActive
-              ]}
-            >
+            <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>
               {cat}
             </Text>
           </Pressable>
@@ -299,20 +284,41 @@ export default function PostScreen() {
 
       <View style={styles.locationHeaderRow}>
         <Text style={styles.label}>Pickup Location</Text>
-        <Pressable
-          onPress={handleGetCurrentLocation}
-          disabled={isFetchingLocation}
-        >
+        <Pressable onPress={handleGetCurrentLocation} disabled={isFetchingLocation}>
           <Text style={styles.currentLocationText}>
             {isFetchingLocation ? "Locating..." : "📍 Use Current"}
           </Text>
         </Pressable>
       </View>
+
+      <LocationAutocomplete
+        value={locationInput}
+        onChangeText={(text) => {
+          setLocationInput(text);
+          setSelectedLocation(null);
+        }}
+        onSelectLocation={(location) => {
+          setSelectedLocation(location);
+        }}
+      />
+
+      {selectedLocation && (
+        <View style={styles.selectedLocationBox}>
+          <Text style={styles.selectedLocationText}>
+            ✅ Selected: {selectedLocation.locationName}
+          </Text>
+          <Text style={styles.selectedLocationSubtext}>
+            {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+          </Text>
+        </View>
+      )}
+
+      <Text style={styles.label}>Floor / Room Details (Optional)</Text>
       <TextInput
         style={styles.input}
-        placeholder="e.g. Engineering Building"
-        value={location}
-        onChangeText={setLocation}
+        value={locationDetails}
+        onChangeText={setLocationDetails}
+        placeholder="e.g. Level 2, Room 214"
       />
 
       <Text style={styles.label}>Quantity</Text>
@@ -323,32 +329,24 @@ export default function PostScreen() {
         keyboardType="numeric"
       />
 
-      {/* NEW: Dietary Tags as clickable pills */}
       <Text style={styles.label}>Dietary Tags</Text>
       <View style={styles.tagsContainer}>
         {DIETARY_OPTIONS.map((tag) => (
           <Pressable
             key={tag}
-            style={[
-              styles.tagPill,
-              dietaryTags.includes(tag) && styles.tagPillActive
-            ]}
+            style={[styles.tagPill, dietaryTags.includes(tag) && styles.tagPillActive]}
             onPress={() => toggleDietaryTag(tag)}
           >
-            <Text
-              style={[
-                styles.tagText,
-                dietaryTags.includes(tag) && styles.tagTextActive
-              ]}
-            >
+            <Text style={[styles.tagText, dietaryTags.includes(tag) && styles.tagTextActive]}>
               {tag}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      {/* NEW: Allergen Warnings as clickable red pills */}
-      <Text style={[styles.label, { color: '#C62828', marginTop: 16 }]}>Allergen Warnings</Text>
+      <Text style={[styles.label, { color: "#C62828", marginTop: 16 }]}>
+        Allergen Warnings
+      </Text>
       <View style={styles.tagsContainer}>
         {WARNING_OPTIONS.map((warn) => (
           <Pressable
@@ -361,7 +359,7 @@ export default function PostScreen() {
           >
             <Text
               style={[
-                styles.warningText,
+                styles.warningTextPill,
                 allergenWarnings.includes(warn) && styles.warningTextActive
               ]}
             >
@@ -372,13 +370,8 @@ export default function PostScreen() {
       </View>
 
       <Text style={styles.label}>Pickup Deadline</Text>
-      <Pressable
-        style={styles.input}
-        onPress={() => setShowDeadlinePicker(true)}
-      >
-        <Text style={{ fontSize: 15, color: "#222" }}>
-          {formatDeadlineDisplay(deadline)}
-        </Text>
+      <Pressable style={styles.input} onPress={() => setShowDeadlinePicker(true)}>
+        <Text style={{ fontSize: 15, color: "#222" }}>{formatDeadlineDisplay(deadline)}</Text>
       </Pressable>
 
       {showDeadlinePicker && (
@@ -389,9 +382,7 @@ export default function PostScreen() {
           minimumDate={new Date()}
           onChange={(event, selectedDate) => {
             setShowDeadlinePicker(false);
-            if (selectedDate) {
-              setDeadline(selectedDate);
-            }
+            if (selectedDate) setDeadline(selectedDate);
           }}
         />
       )}
@@ -453,6 +444,22 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 15
   },
+  selectedLocationBox: {
+    backgroundColor: "#E8F5E9",
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 10
+  },
+  selectedLocationText: {
+    color: "#1B5E20",
+    fontWeight: "700",
+    fontSize: 14
+  },
+  selectedLocationSubtext: {
+    color: "#2E7D32",
+    fontSize: 12,
+    marginTop: 4
+  },
   categoryRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -479,12 +486,10 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontWeight: "700"
   },
-  
-  // Tag Styles
   tagsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 8
   },
   tagPill: {
     backgroundColor: "#fff",
@@ -507,8 +512,6 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontWeight: "700"
   },
-
-  // Warning Styles
   warningPill: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -521,7 +524,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#C62828",
     borderColor: "#C62828"
   },
-  warningText: {
+  warningTextPill: {
     color: "#C62828",
     fontSize: 13,
     fontWeight: "600"
@@ -530,7 +533,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700"
   },
-
   photoButton: {
     backgroundColor: "#E8F5E9",
     paddingVertical: 14,
