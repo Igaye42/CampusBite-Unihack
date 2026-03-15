@@ -17,15 +17,17 @@ import {
 } from "../../services/firebase";
 
 export default function ClaimScreen() {
-const { id, food_title, qty, location, latitude, longitude } =
-  useLocalSearchParams<{
-    id?: string;
-    food_title?: string;
-    qty?: string;
-    location?: string;
-    latitude?: string;
-    longitude?: string;
-  }>();
+  // FIXED: Added safety_risk to the destructured object and its type definition
+  const { id, food_title, qty, location, latitude, longitude, safety_risk } =
+    useLocalSearchParams<{
+      id?: string;
+      food_title?: string;
+      qty?: string;
+      location?: string;
+      latitude?: string;
+      longitude?: string;
+      safety_risk?: string; 
+    }>();
 
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
@@ -84,43 +86,43 @@ const { id, food_title, qty, location, latitude, longitude } =
     }
   };
 
-const openMapsForNavigation = (
-  destination: string,
-  lat?: string,
-  lng?: string
-) => {
-  const hasCoords = lat && lng;
+  const openMapsForNavigation = (
+    destination: string,
+    lat?: string,
+    lng?: string
+  ) => {
+    const hasCoords = lat && lng;
 
-  let url: string | undefined;
+    let url: string | undefined;
 
-  if (hasCoords) {
-    url = Platform.select({
-      ios: `maps:0,0?q=${lat},${lng}`,
-      android: `geo:${lat},${lng}?q=${lat},${lng}`
-    });
-  } else {
-    if (!destination || destination === "Unknown Location") {
-      Alert.alert(
-        "Invalid Location",
-        "No valid address provided for navigation."
-      );
-      return;
+    if (hasCoords) {
+      url = Platform.select({
+        ios: `maps:0,0?q=${lat},${lng}`,
+        android: `geo:${lat},${lng}?q=${lat},${lng}`
+      });
+    } else {
+      if (!destination || destination === "Unknown Location") {
+        Alert.alert(
+          "Invalid Location",
+          "No valid address provided for navigation."
+        );
+        return;
+      }
+
+      const encodedQuery = encodeURIComponent(destination);
+
+      url = Platform.select({
+        ios: `maps:0,0?q=${encodedQuery}`,
+        android: `geo:0,0?q=${encodedQuery}`
+      });
     }
 
-    const encodedQuery = encodeURIComponent(destination);
-
-    url = Platform.select({
-      ios: `maps:0,0?q=${encodedQuery}`,
-      android: `geo:0,0?q=${encodedQuery}`
-    });
-  }
-
-  if (url) {
-    Linking.openURL(url).catch(() => {
-      Alert.alert("Error", "Could not open map application.");
-    });
-  }
-};
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        Alert.alert("Error", "Could not open map application.");
+      });
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -136,7 +138,7 @@ const openMapsForNavigation = (
 
           <Pressable
             style={{ marginBottom: 16, marginTop: 4 }}
-onPress={() => openMapsForNavigation(location || "", latitude, longitude)}
+            onPress={() => openMapsForNavigation(location || "", latitude, longitude)}
           >
             <Text style={{ color: "#0277BD", fontWeight: "700", fontSize: 15 }}>
               🧭 Get Directions
