@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from "firebase/firestore";
 import {
   getAuth, 
@@ -365,7 +366,10 @@ export function subscribeToUserListings(userId: string, callback: any) {
     (querySnapshot) => {
       const listings: any[] = [];
       querySnapshot.forEach((doc) => {
-        listings.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        if (!data.uploaderHidden) {
+          listings.push({ id: doc.id, ...data });
+        }
       });
 
       // Sort by creation time descending
@@ -384,6 +388,33 @@ export function subscribeToUserListings(userId: string, callback: any) {
   );
 
   return unsubscribe;
+}
+
+/**
+ * Marks all claimed listings as hidden for the uploader.
+ */
+export async function clearUserClaimedListings(userId: string) {
+  try {
+    const q = query(
+      collection(db, "listings"),
+      where("uploaderId", "==", userId),
+      where("status", "==", "claimed")
+    );
+    
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    
+    snap.forEach((doc) => {
+      // Use existing uploaderHidden if it exists elsewhere, or set it
+      batch.update(doc.ref, { uploaderHidden: true });
+    });
+    
+    await batch.commit();
+    console.log(`Cleared ${snap.size} claimed listings for user ${userId}`);
+  } catch (error) {
+    console.error("Error clearing claimed listings:", error);
+    throw error;
+  }
 }
 
 /**
@@ -518,11 +549,17 @@ export async function claimListing(listingId: string, claimerId: string) {
     const itemWeight = listingSnap.data().estimated_weight_kg || 0.35;
     const itemCo2 = itemWeight * 2.5; // Calculate dynamic CO2 prevention
 
-    // 2. Lock the specific listing
+    // 2. Fetch claimer details for display
+    const claimerDoc = await getDoc(doc(db, "students", claimerId));
+    const claimerData = claimerDoc.exists() ? claimerDoc.data() : {};
+
+    // 3. Lock the specific listing
     await updateDoc(listingRef, {
       status: "claimed",
       claim_code: claimCode,
       claimerId: claimerId,
+      claimerName: claimerData.displayName || "Anonymous",
+      claimerAvatar: claimerData.avatarUrl || null,
       claimedAt: serverTimestamp()
     });
 

@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
     padding: 16
   },
   heading: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 26,
+    fontWeight: "800",
     color: "#1B4332",
     marginBottom: 4
   },

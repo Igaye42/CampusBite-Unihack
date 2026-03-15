@@ -1,7 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -15,19 +14,20 @@ import {
   View
 } from "react-native";
 
-import { 
-  uploadFoodListing, 
-  subscribeToUserListings, 
-  deleteFoodListing, 
-  updateFoodListing 
-} from "../../services/firebase";
-import { analyzeFoodImage } from "../../services/gemini";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useEffect } from "react";
 import LocationAutocomplete, {
   SelectedLocation
 } from "../../components/LocationAutocomplete";
 import { useAuth } from "../../context/AuthContext";
-import { useEffect } from "react";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import {
+  clearUserClaimedListings,
+  deleteFoodListing,
+  subscribeToUserListings,
+  updateFoodListing,
+  uploadFoodListing
+} from "../../services/firebase";
+import { analyzeFoodImage } from "../../services/gemini";
 
 const CATEGORIES = ["meal", "snack", "dessert", "drink", "groceries", "other"];
 const DIETARY_OPTIONS = [
@@ -51,6 +51,8 @@ export default function PostScreen() {
   const [isCreatingListing, setIsCreatingListing] = useState(false);
   const [editingListing, setEditingListing] = useState<any>(null);
   const [userListings, setUserListings] = useState<any[]>([]);
+  const [isClearing, setIsClearing] = useState(false);
+  const [showRecentActivity, setShowRecentActivity] = useState(true);
 
   const [imageUri, setImageUri] = useState("");
   const [imageBase64, setImageBase64] = useState("");
@@ -237,8 +239,8 @@ export default function PostScreen() {
       };
 
       await uploadFoodListing(
-        finalData, 
-        selectedLocation, 
+        finalData,
+        selectedLocation,
         {
           food_title: foodTitle,
           category,
@@ -295,9 +297,9 @@ export default function PostScreen() {
   const handleDelete = (listingId: string) => {
     Alert.alert("Delete Listing", "Are you sure you want to delete this listing?", [
       { text: "Cancel", style: "cancel" },
-      { 
-        text: "Delete", 
-        style: "destructive", 
+      {
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
           try {
             await deleteFoodListing(listingId, user!.uid);
@@ -327,6 +329,35 @@ export default function PostScreen() {
     setIsCreatingListing(true);
   };
 
+  const handleClearClaimed = async () => {
+    if (!user) return;
+
+    // Check if there are any claimed listings to clear
+    const hasClaimed = userListings.some(l => l.status === 'claimed');
+    if (!hasClaimed) return;
+
+    Alert.alert(
+      "Clear Activity",
+      "This will hide all claimed listings from your history. Claimers will still see them in their history. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          onPress: async () => {
+            setIsClearing(true);
+            try {
+              await clearUserClaimedListings(user.uid);
+            } catch (e) {
+              Alert.alert("Error", "Failed to clear activity.");
+            } finally {
+              setIsClearing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (!isCreatingListing) {
     return (
       <View style={styles.dashboardContainer}>
@@ -335,8 +366,8 @@ export default function PostScreen() {
           <Text style={styles.subheading}>Manage your active food shares</Text>
         </View>
 
-        <Pressable 
-          style={styles.heroPostButton} 
+        <Pressable
+          style={styles.heroPostButton}
           onPress={() => setIsCreatingListing(true)}
         >
           <View style={styles.heroPostContent}>
@@ -351,41 +382,95 @@ export default function PostScreen() {
           <Ionicons name="chevron-forward" size={24} color="#2E7D32" />
         </Pressable>
 
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
-        <ScrollView contentContainerStyle={styles.listingsList}>
-          {userListings.length > 0 ? (
-            userListings.map((listing) => (
-              <View key={listing.id} style={styles.listingCard}>
-                <View style={styles.listingInfo}>
-                  <Text style={styles.listingTitle}>{listing.food_title}</Text>
-                  <Text style={styles.listingMeta}>
-                    {listing.locationName} • {listing.status}
-                  </Text>
+        <Pressable 
+          style={styles.sectionHeaderDropdown}
+          onPress={() => setShowRecentActivity(!showRecentActivity)}
+        >
+          <View style={styles.sectionHeaderLeft}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+          </View>
+          <View style={styles.sectionHeaderRight}>
+            <Ionicons 
+              name={showRecentActivity ? "chevron-down" : "chevron-forward"} 
+              size={18} 
+              color="#5C6F65" 
+            />
+          </View>
+        </Pressable>
+        
+        {/* Clear button moved outside or kept inside if desired, user said 'Recent Activity' as a togglable dropdown */}
+        {showRecentActivity && userListings.some(l => l.status === 'claimed') && (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, marginBottom: 8 }}>
+            <Pressable 
+              onPress={handleClearClaimed}
+              style={({ pressed }) => [
+                styles.clearButton,
+                pressed && { opacity: 0.7 }
+              ]}
+              disabled={isClearing}
+            >
+              {isClearing ? (
+                <ActivityIndicator size="small" color="#2E7D32" />
+              ) : (
+                <Text style={styles.clearButtonText}>Clear</Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {showRecentActivity && (
+          <ScrollView contentContainerStyle={styles.listingsList}>
+            {userListings.length > 0 ? (
+              userListings.map((listing) => (
+                <View key={listing.id} style={styles.listingCard}>
+                  <View style={styles.listingInfo}>
+                    <Text style={styles.listingTitle}>{listing.food_title}</Text>
+                    <Text style={styles.listingMeta}>
+                      {listing.locationName} • {listing.status}
+                    </Text>
+                    {listing.status === 'claimed' && (
+                      <View style={[styles.claimedInfoRow, { marginTop: 8 }]}>
+                        <View style={styles.claimerLabelBox}>
+                          <Text style={styles.claimerLabel}>Claimed by</Text>
+                        </View>
+                        <View style={styles.claimerProfile}>
+                          {listing.claimerAvatar ? (
+                            <Image source={{ uri: listing.claimerAvatar }} style={styles.claimerAvatar} />
+                          ) : (
+                            <View style={styles.claimerAvatarPlaceholder}>
+                              <Text style={styles.claimerAvatarText}>
+                                {listing.claimerName?.charAt(0).toUpperCase() || "?"}
+                              </Text>
+                            </View>
+                          )}
+                          <Text style={styles.claimerName} numberOfLines={1}>
+                            {listing.claimerName || "Someone"}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                  {listing.status === 'available' && (
+                    <View style={styles.actionRow}>
+                      <Pressable style={styles.editButton} onPress={() => startEditing(listing)}>
+                        <Ionicons name="pencil" size={16} color="#2E7D32" />
+                      </Pressable>
+                      <Pressable style={styles.deleteButton} onPress={() => handleDelete(listing.id)}>
+                        <Ionicons name="trash-outline" size={16} color="#C62828" />
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
-                {listing.status === 'available' ? (
-                  <View style={styles.actionRow}>
-                    <Pressable style={styles.editButton} onPress={() => startEditing(listing)}>
-                      <Ionicons name="pencil" size={16} color="#2E7D32" />
-                    </Pressable>
-                    <Pressable style={styles.deleteButton} onPress={() => handleDelete(listing.id)}>
-                      <Ionicons name="trash-outline" size={16} color="#C62828" />
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.statusBadgeClaimed}>
-                    <Text style={styles.statusTextClaimed}>Claimed</Text>
-                  </View>
-                )}
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="fast-food-outline" size={48} color="#DDE5DB" />
+                <Text style={styles.emptyStateText}>No listings yet.</Text>
+                <Text style={styles.emptyStateSub}>Start by posting some leftover food!</Text>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="fast-food-outline" size={48} color="#DDE5DB" />
-              <Text style={styles.emptyStateText}>No listings yet.</Text>
-              <Text style={styles.emptyStateSub}>Start by posting some leftover food!</Text>
-            </View>
-          )}
-        </ScrollView>
+            )}
+          </ScrollView>
+        )}
       </View>
     );
   }
@@ -613,13 +698,40 @@ const styles = StyleSheet.create({
     color: "#5C6F65",
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: "#5C6F65",
     textTransform: "uppercase",
-    marginLeft: 20,
+    letterSpacing: 0.5,
+  },
+  sectionHeaderDropdown: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  sectionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sectionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  clearButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#DDE5DB",
+    backgroundColor: "#fff",
+  },
+  clearButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2E7D32",
   },
   listingsList: {
     paddingHorizontal: 16,
@@ -671,6 +783,57 @@ const styles = StyleSheet.create({
     color: "#757575",
     fontSize: 12,
     fontWeight: "700",
+  },
+  claimedInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  claimerLabelBox: {
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  claimerLabel: {
+    color: "#757575",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  claimerProfile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F1F8F5",
+    padding: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E8F5E9",
+    maxWidth: 120,
+  },
+  claimerAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  claimerAvatarPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#2E7D32",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  claimerAvatarText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  claimerName: {
+    fontSize: 11,
+    color: "#1B4332",
+    fontWeight: "600",
   },
   actionRow: {
     flexDirection: "row",

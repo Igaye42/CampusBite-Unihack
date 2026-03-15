@@ -11,6 +11,7 @@ import {
   Text,
   View
 } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "../../context/AuthContext";
 import {
   claimListing,
@@ -196,10 +197,14 @@ export default function ClaimScreen() {
         style={styles.historyHeader}
         onPress={() => setShowHistory(!showHistory)}
       >
-        <Text style={[styles.heading, { marginTop: 0, marginBottom: 0, fontSize: 20 }]}>
-          Your Recently Claimed
-        </Text>
-        <Text style={styles.arrowIcon}>{showHistory ? '▼' : '▶'}</Text>
+        <View style={styles.historyHeaderLeft}>
+          <Text style={styles.historyHeaderText}>Your Recently Claimed</Text>
+        </View>
+        <Ionicons 
+          name={showHistory ? "chevron-down" : "chevron-forward"} 
+          size={18} 
+          color="#5C6F65" 
+        />
       </Pressable>
 
       {showHistory && (
@@ -258,25 +263,29 @@ const styles = StyleSheet.create({
     padding: 16
   },
   heading: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 26,
+    fontWeight: "800",
     color: "#1B4332",
-    marginBottom: 16
+    marginBottom: 12
   },
   historyHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 24,
-    marginBottom: 16,
-    backgroundColor: "#E8F5E9",
-    padding: 12,
-    borderRadius: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  arrowIcon: {
-    fontSize: 18,
-    color: "#2E7D32",
-    fontWeight: "bold",
+  historyHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  historyHeaderText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5C6F65",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   card: {
     backgroundColor: "#fff",
